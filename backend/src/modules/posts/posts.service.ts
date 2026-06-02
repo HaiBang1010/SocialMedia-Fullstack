@@ -1,4 +1,5 @@
 import { DeleteObjectCommand } from '@aws-sdk/client-s3';
+import { Prisma, PostVisibility } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/error';
 import { s3Client } from '../../lib/s3';
@@ -7,24 +8,66 @@ import { publicUserSelect } from '../users/users.service';
 import { isFollowing } from '../follows/follows.service';
 import type { CreatePostInput, UpdatePostInput, PaginationInput } from './posts.schema';
 
-// include dùng chung cho mọi response trả 1 post
-const postInclude = {
-  author: { select: publicUserSelect },
-  media: { orderBy: { order: 'asc' as const } },
-} as const;
+// include dùng chung cho mọi response trả 1 post.
+// Function nhận viewerId để: (a) đếm likes/comments, (b) biết viewer đã like chưa.
+// Export để Feed module reuse cùng 1 nguồn include.
+export const postInclude = (viewerId?: string) =>
+  ({
+    author: { select: publicUserSelect },
+    media: { orderBy: { order: 'asc' } },
+    _count: { select: { likes: true, comments: true } },
+    ...(viewerId
+      ? { likes: { where: { userId: viewerId }, take: 1, select: { userId: true } } }
+      : {}),
+  }) satisfies Prisma.PostInclude;
+
+// Shape post đầy đủ field mà serializePost cần. `likes` optional vì postInclude
+// bỏ nó khi không có viewerId (anonymous viewer).
+type EnrichedPost = Prisma.PostGetPayload<{
+  include: {
+    author: { select: typeof publicUserSelect };
+    media: { orderBy: { order: 'asc' } };
+    _count: { select: { likes: true; comments: true } };
+    likes: { select: { userId: true } };
+  };
+}>;
+type SerializablePost = Omit<EnrichedPost, 'likes'> & { likes?: EnrichedPost['likes'] };
+
+/**
+ * Transform a Prisma post (fetched with postInclude) into the API DTO, adding the
+ * 4 social fields: likesCount / commentsCount / isLikedByMe / isFollowingAuthor.
+ * author/media giữ nguyên Date — res.json() serialize sang ISO ở HTTP layer (convention dự án).
+ * Export để Feed module reuse.
+ */
+export function serializePost(post: SerializablePost, options: { isFollowingAuthor: boolean }) {
+  return {
+    id: post.id,
+    authorId: post.authorId,
+    caption: post.caption,
+    visibility: post.visibility,
+    createdAt: post.createdAt.toISOString(),
+    author: post.author,
+    media: post.media,
+    likesCount: post._count.likes,
+    commentsCount: post._count.comments,
+    isLikedByMe: (post.likes?.length ?? 0) > 0,
+    isFollowingAuthor: options.isFollowingAuthor,
+  };
+}
 
 /**
  * Fetch a post enforcing READ visibility, or throw 404 (existence hidden — never 403 on read).
  * - PUBLIC: anyone
  * - FOLLOWERS: the owner, or a viewer who follows the author
  * - PRIVATE: owner only
- * Shared gate for getPostById (Phiên 2), likes, and comments.
- * Returns a minimal projection; callers that need the full post re-fetch with `postInclude`.
+ * Shared gate for getPostById, likes, and comments. Returns the enriched post
+ * (postInclude) so getPostById can serialize it directly; like/comment callers
+ * use it purely as a visibility gate and ignore the return value.
  */
 export async function getViewablePost(postId: string, viewerId?: string) {
   const post = await prisma.post.findUnique({
     where: { id: postId },
-    select: { id: true, authorId: true, visibility: true },
+    include: postInclude(viewerId),
   });
 
   if (!post) {
@@ -48,7 +91,7 @@ export async function getViewablePost(postId: string, viewerId?: string) {
  * KHÔNG verify object S3 tồn tại — tin client đã upload (orphan check để Phase polish).
  */
 export async function createPost(authorId: string, input: CreatePostInput) {
-  return prisma.post.create({
+  const post = await prisma.post.create({
     data: {
       authorId,
       caption: input.caption?.trim() || null,
@@ -64,38 +107,36 @@ export async function createPost(authorId: string, input: CreatePostInput) {
         })),
       },
     },
-    include: postInclude,
+    include: postInclude(authorId),
   });
+
+  // Author tạo post của chính mình → isFollowingAuthor = false; chưa ai like → counts = 0.
+  return serializePost(post, { isFollowingAuthor: false });
 }
 
 /**
- * Lấy 1 post + check visibility.
- * PRIVATE/FOLLOWERS bởi non-owner → 404 (KHÔNG 403) to prevent existence leak.
- * Follow-based visibility thật sẽ thêm ở Checkpoint 2.3b.
+ * Lấy 1 post (enriched DTO). Visibility enforce qua getViewablePost:
+ * PRIVATE/FOLLOWERS bởi non-owner non-follower → 404 (giấu existence, KHÔNG 403).
  */
 export async function getPostById(postId: string, viewerId?: string) {
-  const post = await prisma.post.findUnique({
-    where: { id: postId },
-    include: postInclude,
-  });
+  const post = await getViewablePost(postId, viewerId);
 
-  if (!post) {
-    throw new AppError(404, 'PostNotFound', 'Post not found');
+  // isFollowingAuthor cho viewer (owner xem post của chính mình → false).
+  let isFollowingAuthor = false;
+  if (viewerId && viewerId !== post.authorId) {
+    isFollowingAuthor = await isFollowing(viewerId, post.authorId);
   }
 
-  const isOwner = viewerId === post.authorId;
-  if (post.visibility !== 'PUBLIC' && !isOwner) {
-    // PRIVATE returns 404 to prevent existence leak
-    throw new AppError(404, 'PostNotFound', 'Post not found');
-  }
-
-  return post;
+  return serializePost(post, { isFollowingAuthor });
 }
 
 /**
  * List post của 1 user (cho ProfilePage). Cursor pagination theo (createdAt desc, id desc).
- * - Account private + viewer không phải owner → empty list (follow check để 2.3b).
- * - Visibility từng post: PUBLIC luôn hiện; FOLLOWERS/PRIVATE chỉ owner.
+ * Visibility honor follow-check thật:
+ * - Owner: cả 3 (PUBLIC/FOLLOWERS/PRIVATE).
+ * - Follower: PUBLIC + FOLLOWERS.
+ * - Người ngoài (account public): chỉ PUBLIC.
+ * - Account private + non-owner + non-follower → empty list (giấu nội dung).
  */
 export async function listPostsByUsername(
   username: string,
@@ -113,30 +154,44 @@ export async function listPostsByUsername(
 
   const isOwner = viewerId === user.id;
 
-  // Account-level privacy: private account + người ngoài → chưa cho xem (2.3b thêm follow)
-  if (user.isPrivate && !isOwner) {
+  // Tính follow 1 LẦN (tránh N+1) — dùng cho cả gate private-account lẫn visibility filter.
+  let viewerFollows = false;
+  if (viewerId && !isOwner) {
+    viewerFollows = await isFollowing(viewerId, user.id);
+  }
+
+  // Private account: chỉ owner + follower mới được xem danh sách post.
+  if (user.isPrivate && !isOwner && !viewerFollows) {
     return { posts: [], nextCursor: null };
   }
 
-  const where = isOwner
-    ? { authorId: user.id }
-    : { authorId: user.id, visibility: 'PUBLIC' as const };
+  const allowedVisibility: PostVisibility[] = isOwner
+    ? ['PUBLIC', 'FOLLOWERS', 'PRIVATE']
+    : viewerFollows
+      ? ['PUBLIC', 'FOLLOWERS']
+      : ['PUBLIC'];
 
   const { cursor, limit } = pagination;
 
   const rows = await prisma.post.findMany({
-    where,
-    include: postInclude,
+    where: { authorId: user.id, visibility: { in: allowedVisibility } },
+    include: postInclude(viewerId),
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: limit + 1, // lấy dư 1 để biết còn trang sau
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
   });
 
   const hasMore = rows.length > limit;
-  const posts = hasMore ? rows.slice(0, limit) : rows;
-  const nextCursor = hasMore ? posts[posts.length - 1]!.id : null;
+  const slice = hasMore ? rows.slice(0, limit) : rows;
+  const nextCursor = hasMore ? slice[slice.length - 1]!.id : null;
 
-  return { posts, nextCursor };
+  // Mọi post cùng author → isFollowingAuthor là 1 giá trị (owner: false).
+  const isFollowingAuthor = !isOwner && viewerFollows;
+
+  return {
+    posts: slice.map((p) => serializePost(p, { isFollowingAuthor })),
+    nextCursor,
+  };
 }
 
 /**
@@ -156,11 +211,14 @@ export async function updatePost(postId: string, userId: string, input: UpdatePo
   if (input.caption !== undefined) data.caption = input.caption.trim() || null;
   if (input.visibility !== undefined) data.visibility = input.visibility;
 
-  return prisma.post.update({
+  const updated = await prisma.post.update({
     where: { id: postId },
     data,
-    include: postInclude,
+    include: postInclude(userId),
   });
+
+  // Chỉ owner mới tới được đây → isFollowingAuthor = false (không follow chính mình).
+  return serializePost(updated, { isFollowingAuthor: false });
 }
 
 /**

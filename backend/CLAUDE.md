@@ -68,6 +68,7 @@ router.post('/x', validate(xSchema), asyncHandler(async (req, res) => {
 - Throw `AppError(statusCode, code, message)` cho lỗi nghiệp vụ
 - KHÔNG bao giờ đưa `passwordHash` vào response object → dùng `publicUserSelect`
 - Trả về plain objects, KHÔNG res/req
+- Post serialization: `posts.service.ts` export `postInclude(viewerId?)` (Prisma include động: author/media/_count + likes của viewer) và `serializePost(post, { isFollowingAuthor })` (DTO + 4 social field). Feed reuse 2 helper này — KHÔNG tự build include/DTO riêng cho post.
 
 ### Schemas
 - Mỗi endpoint = 1 Zod schema named export
@@ -114,11 +115,23 @@ router.post('/x', validate(xSchema), asyncHandler(async (req, res) => {
 | GET | `/posts/:id` | optional | xem 1 post (private/followers + non-owner → 404) |
 | PATCH | `/posts/:id` | ✓ | sửa caption/visibility (owner) |
 | DELETE | `/posts/:id` | ✓ | xóa post + media S3 (owner) |
+| POST | `/posts/:id/like` | ✓ | like post (idempotent) |
+| DELETE | `/posts/:id/like` | ✓ | unlike post (idempotent) |
+| POST | `/posts/:id/comments` | ✓ | thêm comment |
+| GET | `/posts/:id/comments` | optional | list comment (oldest first, cursor) |
+| PATCH | `/comments/:id` | ✓ | sửa comment (author) |
+| DELETE | `/comments/:id` | ✓ | xóa comment (author hoặc post owner) |
+| POST | `/users/:username/follow` | ✓ | follow user (idempotent) |
+| DELETE | `/users/:username/follow` | ✓ | unfollow user (idempotent) |
+| GET | `/users/:username/followers` | optional | list followers (cursor) |
+| GET | `/users/:username/following` | optional | list following (cursor) |
+| GET | `/feed` | ✓ | personalized feed (following users, 14 ngày, cursor) |
 
 Khi thêm endpoint mới, update bảng trên.
 
 > **PostMedia.objectKey** lưu S3 key (không chỉ URL) để `DeleteObject` khi xóa post — URL không đủ vì public-read URL có thể khác key. Xóa S3 là best-effort: fail thì log, không chặn DB delete.
-> **Visibility**: post PRIVATE/FOLLOWERS bị non-owner xem (GET) → trả **404** (ẩn existence), không 403. Write (PATCH/DELETE) bởi non-owner → 403.
+> **Visibility (follow-aware)**: GET 1 post / list — PUBLIC ai cũng xem; FOLLOWERS chỉ owner + follower; PRIVATE chỉ owner. Non-owner không đủ điều kiện → **404** (ẩn existence), không 403. Gate dùng chung `getViewablePost` (posts.service). Write (PATCH/DELETE) bởi non-owner → 403. Feed loại PRIVATE.
+> **Post DTO**: mọi response trả post (single/list/feed) đi qua `serializePost` → kèm `likesCount`, `commentsCount`, `isLikedByMe`, `isFollowingAuthor`.
 > **`optionalAuth`** (middleware/auth.ts): verify token nếu có, KHÔNG 401 nếu thiếu — dùng cho route public cần biết viewer.
 
 ## Khi thêm feature mới

@@ -69,6 +69,7 @@ function registerAll() {
   const { registerFollowsOpenApi } = require('../modules/follows/follows.openapi');
   const { registerLikesOpenApi } = require('../modules/likes/likes.openapi');
   const { registerCommentsOpenApi } = require('../modules/comments/comments.openapi');
+  const { registerFeedOpenApi } = require('../modules/feed/feed.openapi');
   const { registerHealthOpenApi } = require('./health.openapi');
   registerAuthOpenApi(registry);
   registerUsersOpenApi(registry);
@@ -77,6 +78,7 @@ function registerAll() {
   registerFollowsOpenApi(registry);
   registerLikesOpenApi(registry);
   registerCommentsOpenApi(registry);
+  registerFeedOpenApi(registry);
   registerHealthOpenApi(registry);
   registered = true;
 }
@@ -100,6 +102,7 @@ export function buildOpenApiDocument() {
       { name: 'Follows' },
       { name: 'Likes' },
       { name: 'Comments' },
+      { name: 'Feed', description: 'Personalized feed from following users' },
       { name: 'Meta' },
     ],
   });

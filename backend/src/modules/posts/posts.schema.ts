@@ -62,6 +62,10 @@ export const postResponseSchema = z.object({
     createdAt: z.string(),
   }),
   media: z.array(postMediaSchema),
+  likesCount: z.number().int(),
+  commentsCount: z.number().int(),
+  isLikedByMe: z.boolean(),
+  isFollowingAuthor: z.boolean(),
 });
 
 export const postListResponseSchema = z.object({

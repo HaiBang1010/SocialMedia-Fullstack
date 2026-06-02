@@ -94,8 +94,8 @@ export function registerPostsOpenApi(registry: OpenAPIRegistry) {
     tags: ['Posts'],
     summary: "List a user's posts (cursor pagination)",
     description:
-      'Returns the public posts of a user. The author also sees their FOLLOWERS/PRIVATE posts. ' +
-      'A private account returns an empty list to non-owners (follow check arrives in 2.3b).',
+      'Visibility is follow-aware: the author sees all posts; a follower sees PUBLIC + FOLLOWERS; ' +
+      'others see only PUBLIC. A private account returns an empty list to non-owner non-followers.',
     // Optional auth: the author sends a bearer token to also receive their non-public posts.
     security: [{ bearerAuth: [] }, {}],
     request: {

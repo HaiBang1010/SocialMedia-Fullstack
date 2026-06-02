@@ -11,6 +11,7 @@ import authRoutes from "./modules/auth/auth.routes";
 import usersRoutes from "./modules/users/users.routes";
 import mediaRoutes from "./modules/media/media.routes";
 import postsRoutes, { commentsRouter } from "./modules/posts/posts.routes";
+import feedRoutes from "./modules/feed/feed.routes";
 
 const app = express();
 
@@ -55,6 +56,7 @@ app.use("/users", usersRoutes);
 app.use("/media", mediaRoutes);
 app.use("/posts", postsRoutes);
 app.use("/comments", commentsRouter);
+app.use("/feed", feedRoutes);
 
 // ── ERROR HANDLERS ────────────────────────────
 app.use(notFoundHandler);
