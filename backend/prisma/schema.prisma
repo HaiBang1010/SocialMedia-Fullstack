@@ -1,5 +1,5 @@
-// Phase 1: chỉ User model
-// Các model khác (Post, Story, Message...) sẽ thêm ở các phase sau
+// Phase 2: User + Post + PostMedia
+// Các model khác (Story, Message, AudioTrack...) sẽ thêm ở các phase sau
 
 generator client {
   provider = "prisma-client-js"
@@ -22,6 +22,47 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  posts        Post[]
+
   @@index([username])
   @@index([email])
+}
+
+model Post {
+  id         String         @id @default(cuid())
+  authorId   String
+  caption    String?        @db.Text
+  visibility PostVisibility @default(PUBLIC)
+  createdAt  DateTime       @default(now())
+
+  author User        @relation(fields: [authorId], references: [id])
+  media  PostMedia[]
+
+  @@index([authorId, createdAt])
+}
+
+enum PostVisibility {
+  PUBLIC
+  FOLLOWERS
+  PRIVATE
+}
+
+model PostMedia {
+  id           String    @id @default(cuid())
+  postId       String
+  type         MediaType
+  url          String // publicUrl from presign response
+  objectKey    String // S3 key, used to DeleteObject when the post is deleted
+  thumbnailUrl String?
+  duration     Int?
+  order        Int       @default(0)
+  width        Int?
+  height       Int?
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
 }

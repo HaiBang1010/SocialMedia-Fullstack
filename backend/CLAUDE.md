@@ -107,10 +107,19 @@ router.post('/x', validate(xSchema), asyncHandler(async (req, res) => {
 | GET | `/auth/me` | ✓ | user hiện tại |
 | POST | `/auth/logout` | - | placeholder |
 | GET | `/users/:username` | - | profile public |
+| GET | `/users/:username/posts` | optional | list post của user (cursor pagination) |
 | PATCH | `/users/me` | ✓ | sửa profile |
 | POST | `/media/presign` | ✓ | xin presigned URL upload |
+| POST | `/posts` | ✓ | tạo post (ảnh và/hoặc caption) |
+| GET | `/posts/:id` | optional | xem 1 post (private/followers + non-owner → 404) |
+| PATCH | `/posts/:id` | ✓ | sửa caption/visibility (owner) |
+| DELETE | `/posts/:id` | ✓ | xóa post + media S3 (owner) |
 
 Khi thêm endpoint mới, update bảng trên.
+
+> **PostMedia.objectKey** lưu S3 key (không chỉ URL) để `DeleteObject` khi xóa post — URL không đủ vì public-read URL có thể khác key. Xóa S3 là best-effort: fail thì log, không chặn DB delete.
+> **Visibility**: post PRIVATE/FOLLOWERS bị non-owner xem (GET) → trả **404** (ẩn existence), không 403. Write (PATCH/DELETE) bởi non-owner → 403.
+> **`optionalAuth`** (middleware/auth.ts): verify token nếu có, KHÔNG 401 nếu thiếu — dùng cho route public cần biết viewer.
 
 ## Khi thêm feature mới
 
@@ -129,3 +138,13 @@ Khi thêm endpoint mới, update bảng trên.
 - ❌ Tạo singleton mới cho Prisma — luôn import từ `lib/prisma.ts`
 - ❌ Đọc `process.env` trực tiếp — luôn dùng `env` từ `config/env.ts`
 - ❌ Console.log lung tung — sau này thêm pino logger
+
+## Debug protocol
+
+Khi user báo bug:
+1. KHÔNG sửa ngay — investigate trước
+2. Đọc code liên quan + reproduce mental model
+3. Đề xuất root cause + fix cụ thể
+4. Đợi user confirm trước khi sửa
+
+Áp dụng cho mọi bug, kể cả "rõ ràng".

@@ -10,6 +10,7 @@ import { buildOpenApiDocument } from "./lib/openapi";
 import authRoutes from "./modules/auth/auth.routes";
 import usersRoutes from "./modules/users/users.routes";
 import mediaRoutes from "./modules/media/media.routes";
+import postsRoutes from "./modules/posts/posts.routes";
 
 const app = express();
 
@@ -52,6 +53,7 @@ if (env.NODE_ENV !== "production") {
 app.use("/auth", authRoutes);
 app.use("/users", usersRoutes);
 app.use("/media", mediaRoutes);
+app.use("/posts", postsRoutes);
 
 // ── ERROR HANDLERS ────────────────────────────
 app.use(notFoundHandler);

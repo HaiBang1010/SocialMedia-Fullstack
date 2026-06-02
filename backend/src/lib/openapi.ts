@@ -65,10 +65,12 @@ function registerAll() {
   const { registerAuthOpenApi } = require('../modules/auth/auth.openapi');
   const { registerUsersOpenApi } = require('../modules/users/users.openapi');
   const { registerMediaOpenApi } = require('../modules/media/media.openapi');
+  const { registerPostsOpenApi } = require('../modules/posts/posts.openapi');
   const { registerHealthOpenApi } = require('./health.openapi');
   registerAuthOpenApi(registry);
   registerUsersOpenApi(registry);
   registerMediaOpenApi(registry);
+  registerPostsOpenApi(registry);
   registerHealthOpenApi(registry);
   registered = true;
 }
@@ -84,6 +86,6 @@ export function buildOpenApiDocument() {
       description: 'Instagram-like social media backend — auto-generated from Zod schemas.',
     },
     servers: [{ url: `http://localhost:${env.PORT}` }],
-    tags: [{ name: 'Auth' }, { name: 'Users' }, { name: 'Media' }, { name: 'Meta' }],
+    tags: [{ name: 'Auth' }, { name: 'Users' }, { name: 'Media' }, { name: 'Posts' }, { name: 'Meta' }],
   });
 }

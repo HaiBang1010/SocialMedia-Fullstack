@@ -41,3 +41,29 @@ export function requireAuth(req: Request, res: Response, next: NextFunction): vo
     res.status(401).json({ error: 'Unauthorized', message: 'Token không hợp lệ hoặc đã hết hạn' });
   }
 }
+
+/**
+ * Middleware xác thực TÙY CHỌN.
+ * - Nếu có Bearer token hợp lệ → gán req.user (giống requireAuth)
+ * - Nếu thiếu hoặc token sai → KHÔNG 401, để req.user undefined và đi tiếp
+ * Dùng cho các route public nhưng cần biết viewer là ai để áp visibility
+ * (vd: GET /posts/:id — owner xem được post private, khách thì không).
+ */
+export function optionalAuth(req: Request, _res: Response, next: NextFunction): void {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    next();
+    return;
+  }
+
+  const token = authHeader.slice(7);
+
+  try {
+    const payload = verifyAccessToken(token);
+    req.user = { id: payload.sub, username: payload.username };
+  } catch (err) {
+    // Token sai/hết hạn trong optionalAuth → bỏ qua, coi như khách
+  }
+  next();
+}

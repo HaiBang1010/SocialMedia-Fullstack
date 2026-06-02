@@ -2,7 +2,9 @@ import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/error';
 import type { UpdateProfileInput } from './users.schema';
 
-const publicUserSelect = {
+// Exported để các module khác (vd posts) reuse cho phần `author` —
+// đảm bảo KHÔNG bao giờ lộ email/passwordHash.
+export const publicUserSelect = {
   id: true,
   username: true,
   name: true,
