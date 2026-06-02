@@ -6,6 +6,7 @@ import { updateProfileSchema } from './users.schema';
 import * as usersService from './users.service';
 import { paginationSchema } from '../posts/posts.schema';
 import * as postsService from '../posts/posts.service';
+import * as followsService from '../follows/follows.service';
 
 const router = Router();
 
@@ -47,6 +48,66 @@ router.get(
   validate(paginationSchema, 'query'),
   asyncHandler(async (req, res) => {
     const result = await postsService.listPostsByUsername(
+      req.params.username,
+      req.user?.id,
+      req.query as any,
+    );
+    res.json(result);
+  })
+);
+
+/**
+ * POST /users/:username/follow — follow a user (idempotent). Auth required.
+ */
+router.post(
+  '/:username/follow',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const result = await followsService.followUser(req.user!.id, req.params.username);
+    res.json(result);
+  })
+);
+
+/**
+ * DELETE /users/:username/follow — unfollow a user (idempotent). Auth required.
+ */
+router.delete(
+  '/:username/follow',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const result = await followsService.unfollowUser(req.user!.id, req.params.username);
+    res.json(result);
+  })
+);
+
+/**
+ * GET /users/:username/followers — people who follow this user. Cursor pagination.
+ * optionalAuth: a private account's list is visible only to the owner + its followers.
+ */
+router.get(
+  '/:username/followers',
+  optionalAuth,
+  validate(paginationSchema, 'query'),
+  asyncHandler(async (req, res) => {
+    const result = await followsService.listFollowers(
+      req.params.username,
+      req.user?.id,
+      req.query as any,
+    );
+    res.json(result);
+  })
+);
+
+/**
+ * GET /users/:username/following — who this user follows. Cursor pagination.
+ * optionalAuth: a private account's list is visible only to the owner + its followers.
+ */
+router.get(
+  '/:username/following',
+  optionalAuth,
+  validate(paginationSchema, 'query'),
+  asyncHandler(async (req, res) => {
+    const result = await followsService.listFollowing(
       req.params.username,
       req.user?.id,
       req.query as any,

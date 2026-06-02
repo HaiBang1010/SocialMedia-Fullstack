@@ -17,6 +17,10 @@
 - [ ] [backend/middleware/error] Thêm pino logger thay console.log.
 - [ ] [backend/modules/users] userPublicSchema (Zod) duplicate với publicUserSelect (Prisma). Sửa field phải đồng bộ 2 chỗ. Cân nhắc generate Zod từ Prisma (prisma-zod-generator) khi schema lớn hơn.
 - [ ] [frontend/auth] Token lưu localStorage (authStore persist) → XSS đọc được. Phase polish: chuyển refresh token sang httpOnly cookie. Phase 1 chấp nhận trade-off.
+- [P2] [backend/follows] Follow approval flow cho private accounts. 
+  Hiện tại: ai follow cũng instant approve (không có Follow.status enum). 
+  Phase polish: thêm enum PENDING/ACCEPTED + endpoints accept/reject + 
+  Notification tích hợp. Đây là feature IG thật có.
 
 ## P3 — Sau nữa (nice-to-have, có thể không làm)
 
@@ -31,6 +35,7 @@
 - [ ] [backend/storage] Creds MinIO hardcode `minio`/`minio12345` trong 
       docker-compose.yml (dev only). Phase polish: chuyển sang env var 
       (`${MINIO_ROOT_USER}`...) + secret thật cho prod, không commit creds.
+
 
 ## DONE
 

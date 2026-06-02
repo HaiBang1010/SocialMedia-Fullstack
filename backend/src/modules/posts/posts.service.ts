@@ -4,6 +4,7 @@ import { AppError } from '../../middleware/error';
 import { s3Client } from '../../lib/s3';
 import { env } from '../../config/env';
 import { publicUserSelect } from '../users/users.service';
+import { isFollowing } from '../follows/follows.service';
 import type { CreatePostInput, UpdatePostInput, PaginationInput } from './posts.schema';
 
 // include dùng chung cho mọi response trả 1 post
@@ -11,6 +12,36 @@ const postInclude = {
   author: { select: publicUserSelect },
   media: { orderBy: { order: 'asc' as const } },
 } as const;
+
+/**
+ * Fetch a post enforcing READ visibility, or throw 404 (existence hidden — never 403 on read).
+ * - PUBLIC: anyone
+ * - FOLLOWERS: the owner, or a viewer who follows the author
+ * - PRIVATE: owner only
+ * Shared gate for getPostById (Phiên 2), likes, and comments.
+ * Returns a minimal projection; callers that need the full post re-fetch with `postInclude`.
+ */
+export async function getViewablePost(postId: string, viewerId?: string) {
+  const post = await prisma.post.findUnique({
+    where: { id: postId },
+    select: { id: true, authorId: true, visibility: true },
+  });
+
+  if (!post) {
+    throw new AppError(404, 'PostNotFound', 'Post not found');
+  }
+
+  const isOwner = viewerId === post.authorId;
+  if (isOwner || post.visibility === 'PUBLIC') {
+    return post;
+  }
+  if (post.visibility === 'FOLLOWERS' && viewerId && (await isFollowing(viewerId, post.authorId))) {
+    return post;
+  }
+
+  // PRIVATE for a non-owner, or FOLLOWERS for a non-follower -> hide existence.
+  throw new AppError(404, 'PostNotFound', 'Post not found');
+}
 
 /**
  * Tạo post + media (max 1 ở Phase 2) trong 1 lần create lồng nhau.

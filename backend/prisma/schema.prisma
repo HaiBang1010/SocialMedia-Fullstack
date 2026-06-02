@@ -1,4 +1,4 @@
-// Phase 2: User + Post + PostMedia
+// Phase 2: User + Post + PostMedia + Follow + Like + Comment
 // Các model khác (Story, Message, AudioTrack...) sẽ thêm ở các phase sau
 
 generator client {
@@ -23,6 +23,13 @@ model User {
   updatedAt    DateTime @updatedAt
 
   posts        Post[]
+  comments     Comment[]
+  likes        Like[]
+  // Follow relation naming is intentionally "inverted" (matches ARCHITECTURE §3):
+  // - followers: rows where I am the `following` target  -> people who follow ME
+  // - following: rows where I am the `follower`          -> people I follow
+  followers    Follow[] @relation("following")
+  following    Follow[] @relation("follower")
 
   @@index([username])
   @@index([email])
@@ -35,8 +42,10 @@ model Post {
   visibility PostVisibility @default(PUBLIC)
   createdAt  DateTime       @default(now())
 
-  author User        @relation(fields: [authorId], references: [id])
-  media  PostMedia[]
+  author   User        @relation(fields: [authorId], references: [id])
+  media    PostMedia[]
+  comments Comment[]
+  likes    Like[]
 
   @@index([authorId, createdAt])
 }
@@ -65,4 +74,45 @@ model PostMedia {
 enum MediaType {
   IMAGE
   VIDEO
+}
+
+model Follow {
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  // "follower"  = the user who follows; "following" = the user being followed.
+  follower  User @relation("follower", fields: [followerId], references: [id], onDelete: Cascade)
+  following User @relation("following", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@id([followerId, followingId])
+  @@index([followingId]) // followers-list + isFollowing lookup keyed by target
+}
+
+model Like {
+  userId    String
+  postId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@id([userId, postId])
+  @@index([postId])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  postId    String
+  authorId  String
+  parentId  String? // stored in DB; Phase 2 UI renders flat (nested arrives Phase 3)
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+
+  post    Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author  User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parent  Comment?  @relation("replies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies Comment[] @relation("replies")
+
+  @@index([postId, createdAt])
 }
