@@ -21,9 +21,6 @@
   Hiện tại: ai follow cũng instant approve (không có Follow.status enum). 
   Phase polish: thêm enum PENDING/ACCEPTED + endpoints accept/reject + 
   Notification tích hợp. Đây là feature IG thật có.
-- [P2] [frontend/feed] Cuộn xuống infinite scroll (useInfiniteQuery + 
-  IntersectionObserver, không phân trang button). Backend cursor pagination 
-  đã sẵn sàng — chỉ frontend implement.
 - [P2] [frontend/feed] "Reload sau idle ~5 phút" — quyết định cách 
   (TanStack staleTime + refetchOnFocus / idle detection + banner / polling) 
   khi tới Phase 2.4. IG-like behavior.
@@ -31,6 +28,9 @@
 ## P3 — Sau nữa (nice-to-have, có thể không làm)
 
 "switch sang openapi-typescript khi >15 endpoints"
+
+- [P3] [frontend/feed] useFeed nhận custom limit khi cần (vd discover feed).
+  Hiện tại no-arg, dùng backend default 20.
 
 - [ ] [backend/media] Image transform (thumbnail, resize) — Phase 2 chỉ lưu original; thumbnail server-side hoặc on-the-fly cân nhắc Phase polish.
 - [ ] [backend/feed] Feed cải tiến — Phase 2 dùng follow+random simple. Personalized ranking, recency weight, engagement signals → Phase polish.
@@ -45,4 +45,6 @@
 
 ## DONE
 
-(empty, khi xong move xuống đây với date)
+- 2026-06-03 [frontend/feed] Infinite scroll feed (useInfiniteQuery +
+  IntersectionObserver, không phân trang button) — Checkpoint 2.4b. Hand-roll
+  `useInfiniteScroll` (no dep). Dùng chung FeedPage + CommentList.

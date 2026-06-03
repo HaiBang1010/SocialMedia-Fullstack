@@ -108,7 +108,7 @@ export interface Comment {
   author: PublicUser;
 }
 
-// GET /posts/:id/comments — oldest-first, cursor pagination.
+// GET /posts/:id/comments — newest-first, cursor pagination.
 export interface CommentListResponse {
   comments: Comment[];
   nextCursor: string | null;

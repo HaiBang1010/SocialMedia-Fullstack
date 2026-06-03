@@ -8,7 +8,7 @@ import type {
 } from '@/types/api';
 
 export const commentsApi = {
-  // GET /posts/:id/comments → oldest-first, cursor-paginated.
+  // GET /posts/:id/comments → newest-first, cursor-paginated.
   list: async (
     postId: string,
     params?: PaginationParams

@@ -38,7 +38,7 @@ export async function createComment(authorId: string, postId: string, input: Cre
 }
 
 /**
- * List a post's comments, oldest first (createdAt asc — IG-style; newer load on scroll down).
+ * List a post's comments, newest first (createdAt desc; older comments load on scroll down).
  * Requires the viewer can see the post (else 404). Cursor = comment id of the previous page's last item.
  */
 export async function listComments(postId: string, viewerId: string | undefined, pagination: PaginationInput) {
@@ -49,7 +49,7 @@ export async function listComments(postId: string, viewerId: string | undefined,
   const rows = await prisma.comment.findMany({
     where: { postId },
     include: commentInclude,
-    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: limit + 1,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
   });

@@ -146,4 +146,6 @@ Backend-integration plumbing cho posts/feed/comments/likes/follows/media. **KHÔ
 - [x] `api/`: 6 thin client (`posts/feed/comments/likes/follows/media`, object-export như Phase 1) + `upload-client.ts` (axios riêng presigned PUT) + `index.ts` barrel (import qua `@/api`).
 - [x] `features/{feed,posts,comments}/hooks/`: read hooks `useFeed`/`useUserPosts`/`useComments` (`useInfiniteQuery`, cursor, `getNextPageParam: nextCursor ?? undefined`) + `usePost` (`useQuery`, `enabled` guard).
 
+> **Comment list order**: **newest-first** (`createdAt` DESC) — comment mới nhất ở ĐẦU list, scroll xuống = comment cũ hơn (next page). `useCreateComment` optimistic **PREPEND** vào `pages[0]` (KHÔNG append cuối). Backend `comments.service` `orderBy [createdAt desc, id desc]`. (Đổi từ ASC/oldest-first ở 2.4b — quyết định UX: user thấy comment mình vừa gửi ngay không cần scroll.) Caption post (intrinsic) vẫn render ở header trên cùng, không nằm trong comment list.
+
 > **Next 2.4b**: mutation hooks (`useLikePost`/`useFollow`/`useCreateComment`/`useCreatePost`…) + optimistic update + rollback (helper patch-post-across-caches) + UI (PostCard, FeedPage, Composer, profile grid). Giá trị client-side media validation chốt tại đây.

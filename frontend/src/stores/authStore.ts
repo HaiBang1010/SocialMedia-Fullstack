@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { queryClient } from '@/lib/queryClient';
 import type { AuthTokens, User } from '@/types/api';
 
 // SECURITY NOTE (Phase 1): tokens persisted to localStorage are readable by
@@ -34,13 +35,17 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: true,
         }),
 
-      logout: () =>
+      logout: () => {
         set({
           user: null,
           accessToken: null,
           refreshToken: null,
           isAuthenticated: false,
-        }),
+        });
+        // Drop all cached server state on logout so the next user can't briefly
+        // see the previous user's feed/posts (stale cache + privacy leak).
+        queryClient.clear();
+      },
 
       updateUser: (user) => set({ user }),
 

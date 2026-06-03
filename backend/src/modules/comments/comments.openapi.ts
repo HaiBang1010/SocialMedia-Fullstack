@@ -44,9 +44,9 @@ export function registerCommentsOpenApi(registry: OpenAPIRegistry) {
     method: 'get',
     path: '/posts/{id}/comments',
     tags: ['Comments'],
-    summary: "List a post's comments (oldest first, cursor pagination)",
+    summary: "List a post's comments (newest first, cursor pagination)",
     description:
-      'Comments are returned oldest-first (createdAt asc). Requires the viewer can see the post; ' +
+      'Comments are returned newest-first (createdAt desc). Requires the viewer can see the post; ' +
       'otherwise 404 (existence hidden).',
     // Optional auth: send a bearer token so FOLLOWERS/owner posts are visible to the right viewer.
     security: [{ bearerAuth: [] }, {}],

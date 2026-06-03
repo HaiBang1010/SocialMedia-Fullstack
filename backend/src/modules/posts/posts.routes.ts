@@ -99,7 +99,7 @@ router.post(
 );
 
 /**
- * GET /posts/:id/comments — list comments (oldest first, cursor pagination).
+ * GET /posts/:id/comments — list comments (newest first, cursor pagination).
  * optionalAuth so FOLLOWERS/owner posts resolve visibility per viewer.
  */
 router.get(

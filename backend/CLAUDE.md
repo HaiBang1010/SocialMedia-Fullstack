@@ -118,7 +118,7 @@ router.post('/x', validate(xSchema), asyncHandler(async (req, res) => {
 | POST | `/posts/:id/like` | ✓ | like post (idempotent) |
 | DELETE | `/posts/:id/like` | ✓ | unlike post (idempotent) |
 | POST | `/posts/:id/comments` | ✓ | thêm comment |
-| GET | `/posts/:id/comments` | optional | list comment (oldest first, cursor) |
+| GET | `/posts/:id/comments` | optional | list comment (newest first, cursor) |
 | PATCH | `/comments/:id` | ✓ | sửa comment (author) |
 | DELETE | `/comments/:id` | ✓ | xóa comment (author hoặc post owner) |
 | POST | `/users/:username/follow` | ✓ | follow user (idempotent) |

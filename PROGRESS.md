@@ -6,6 +6,32 @@
 
 ---
 
+## 2026-06-03 — Checkpoint 2.4b: Frontend posts UI (feed + PostCard + PostDetail + like/comment)
+
+**Done:**
+- Frontend Phase 2.4b: feed thật (`useFeed` infinite + IntersectionObserver sentinel), `PostCard`, `PostDetail` mở **modal trên desktop / full page trên mobile + direct URL** (background-location). Refactor `HomePage` → `FeedPage` (giữ StoryBar placeholder Phase 1C, xóa PostCard local + POSTS hardcode). Hand-roll, KHÔNG thêm dependency.
+- Mutation layer optimistic: `useLikePost`/`useUnlikePost` (toggle + reconcile authoritative count ở `onSuccess`, KHÔNG invalidate feed), `useCreateComment` (optimistic prepend + bump count + `onSuccess` invalidate). Helper `lib/postCache.ts` patch 1 post trên CẢ 3 cache (`post`/`feed`/`userPosts`) qua 1 cửa + snapshot/restore cho rollback.
+- UI primitives hand-roll: `ui/dialog` (từ `radix-ui` umbrella) + `ui/skeleton`; common `Avatar`/`Spinner`/`EmptyState`/`ErrorState`; hooks `useInfiniteScroll` + `useIsDesktop`; `lib/format` (relative time + compact number + aspect-ratio clamp [0.8, 1.91]).
+- Bugfix (privacy): logout KHÔNG clear React Query cache → login user B thấy feed/cache user A vài giây trước refetch (rò rỉ private tiềm năng). Fix: `authStore.logout()` gọi `queryClient.clear()`.
+- UX change: comment order đảo **ASC → DESC (newest-first)** cả backend (`comments.service` orderBy desc) + frontend (optimistic **prepend** vào `pages[0]`); comment mới hiện ngay đầu list không cần scroll.
+- UX change: like/comment count chuyển sang **cạnh icon** (`♥ 13.8K  💬 42`, `tabular-nums`), bỏ dòng "X likes" + link "View all comments" riêng dưới.
+
+**Lưu ý kỹ thuật:**
+- `patchPostInCaches`: `userPosts` cache key có username động → match bằng **predicate** (`['users', *, 'posts']`), KHÔNG addressable bằng exact key. `mapPostInInfinite` trả về CÙNG reference khi post không đổi → tránh re-render thừa toàn feed.
+- Like flow CỐ TÌNH KHÔNG invalidate feed ở `onSettled`: invalidate → refetch `GET /feed` → reshuffle thứ tự + mất scroll + flicker. Chỉ dựa optimistic + `likesCount` authoritative từ response.
+- `radix-ui` là gói gộp (`button.tsx` đã `import { Slot } from "radix-ui"`) → Dialog lấy qua `import { Dialog } from "radix-ui"`, KHÔNG cần thêm `@radix-ui/react-dialog`. shadcn `Input` (React 18) KHÔNG forward ref → comment icon focus input qua `id` (`COMMENT_INPUT_ID`) thay ref.
+- Comment order đảo: đổi `orderBy asc→desc` KHÔNG cần sửa cursor logic (Prisma `cursor + skip:1` đi theo orderBy: page sau = comment cũ hơn) + KHÔNG migration.
+- `authStore` import `queryClient` an toàn (acyclic — `queryClient.ts` chỉ import `@tanstack/react-query`). Path 401-refresh-fail trong axios interceptor cũng gọi `logout()` → cũng clear cache.
+
+**Tech debt phát sinh (đề xuất BACKLOG, chờ confirm):**
+- `[frontend/post]` Author name/avatar trong PostCard + PostDetail CHƯA clickable (route `/users/:username` public profile chưa có) — wire khi làm profile page 2.4c.
+- `[frontend/feed]` Chưa dedupe post `id` khi `flatMap` các page infinite — nếu cursor backend trả trùng (post chèn giữa lúc paginate) → duplicate React key. Cân nhắc dedupe theo id.
+- `[frontend/post]` Share/Save (PostActions) vẫn disabled placeholder — wire Phase sau.
+
+**Next:** Commit 2.4b (feature branch) sau khi verify browser-interactive (feed/like/comment/modal desktop+mobile/dark mode/logout-switch-user/comment newest-first). Sau đó 2.4c: follow button + `useFollow`, create-post composer (presigned upload UI), profile real posts grid, edit/delete comment.
+
+---
+
 ## 2026-06-02 — Checkpoint 2.3b-1: Follow + Like + Comment (backend, phiên 1/2)
 
 **Done:**

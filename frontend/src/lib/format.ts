@@ -1,0 +1,58 @@
+// Display formatters — no external date/number lib (hand-rolled on top of Intl).
+
+// Min/max aspect ratio a feed image is allowed to occupy (IG-style):
+// 0.8 = 4:5 portrait floor, 1.91 = landscape ceiling.
+const MIN_RATIO = 0.8;
+const MAX_RATIO = 1.91;
+
+const dateFmt = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
+const dateFmtWithYear = new Intl.DateTimeFormat(undefined, {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+});
+const compactFmt = new Intl.NumberFormat(undefined, {
+  notation: 'compact',
+  maximumFractionDigits: 1,
+});
+
+// Compact, IG-style relative time: "now" / "5m" / "2h" / "3d".
+// Older than 7 days falls back to an absolute date ("Jun 3", or "Jun 3, 2024"
+// once it crosses into another year).
+export function formatRelativeTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '';
+
+  const diffSec = Math.floor((Date.now() - then) / 1000);
+  if (diffSec < 60) return 'now';
+
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m`;
+
+  const diffHour = Math.floor(diffMin / 60);
+  if (diffHour < 24) return `${diffHour}h`;
+
+  const diffDay = Math.floor(diffHour / 24);
+  if (diffDay < 7) return `${diffDay}d`;
+
+  const date = new Date(then);
+  const fmt = date.getFullYear() === new Date().getFullYear() ? dateFmt : dateFmtWithYear;
+  return fmt.format(date);
+}
+
+// Compact counts: 999 → "999", 1243 → "1.2K", 2_300_000 → "2.3M".
+export function formatNumber(n: number): string {
+  return compactFmt.format(n);
+}
+
+// Derive a safe aspect ratio for a media item. Returns a clamped width/height
+// ratio, or null when dimensions are missing (caller falls back to square).
+export function clampAspectRatio(
+  width: number | null,
+  height: number | null,
+): number | null {
+  if (!width || !height) return null;
+  const ratio = width / height;
+  if (!Number.isFinite(ratio) || ratio <= 0) return null;
+  return Math.min(MAX_RATIO, Math.max(MIN_RATIO, ratio));
+}
