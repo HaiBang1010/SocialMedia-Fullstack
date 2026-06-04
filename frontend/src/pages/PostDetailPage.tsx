@@ -14,7 +14,7 @@ export default function PostDetailPage() {
     <div className="mx-auto max-w-3xl px-4 py-4">
       <button
         type="button"
-        onClick={() => navigate('/')}
+        onClick={() => navigate(-1)}
         className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft className="size-4" />

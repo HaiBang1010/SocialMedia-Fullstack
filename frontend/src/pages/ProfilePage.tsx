@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Camera, Loader2 } from 'lucide-react';
+import { ImagePlus, Loader2 } from 'lucide-react';
 import { authApi } from '@/api/auth';
 import { usersApi } from '@/api/users';
 import { useAuthStore } from '@/stores/authStore';
@@ -19,6 +19,10 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import { useUserPosts } from '@/features/posts/hooks/useUserPosts';
+import { useComposerStore } from '@/stores/composerStore';
+import EmptyState from '@/components/common/EmptyState';
+import PostsGrid from '@/components/post/PostsGrid';
 
 function initials(name: string): string {
   return name
@@ -29,17 +33,11 @@ function initials(name: string): string {
     .join('');
 }
 
-// Placeholder counts — real stats arrive with the posts/follows features (Phase 2+).
-const STATS = [
-  { label: 'posts', value: 0 },
-  { label: 'followers', value: 0 },
-  { label: 'following', value: 0 },
-];
-
 export default function ProfilePage() {
   const [editing, setEditing] = useState(false);
   const updateUser = useAuthStore((s) => s.updateUser);
   const queryClient = useQueryClient();
+  const openComposer = useComposerStore((s) => s.open);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['me'],
@@ -47,6 +45,21 @@ export default function ProfilePage() {
   });
 
   const user = data?.user;
+
+  // Real posts count from the (shared) profile grid query. The backend has no
+  // total-count endpoint, so this reflects loaded posts — show a "+" when more
+  // pages remain. followers/following stay placeholder until a count endpoint.
+  const postsQuery = useUserPosts(user?.username ?? '');
+  const loadedPostCount =
+    postsQuery.data?.pages.flatMap((page) => page.posts).length ?? 0;
+  const stats = [
+    {
+      label: 'posts',
+      value: postsQuery.hasNextPage ? `${loadedPostCount}+` : `${loadedPostCount}`,
+    },
+    { label: 'followers', value: '0' },
+    { label: 'following', value: '0' },
+  ];
 
   if (isLoading) {
     return <div className="p-8 text-muted-foreground">Loading…</div>;
@@ -105,7 +118,7 @@ export default function ProfilePage() {
           </div>
 
           <div className="flex gap-6 text-sm">
-            {STATS.map((s) => (
+            {stats.map((s) => (
               <span key={s.label}>
                 <span className="font-semibold">{s.value}</span>{' '}
                 <span className="text-muted-foreground">{s.label}</span>
@@ -127,12 +140,21 @@ export default function ProfilePage() {
         )}
       </div>
 
-      {/* Posts grid placeholder */}
+      {/* Posts grid */}
       <div className="mt-8 border-t pt-8">
-        <div className="flex flex-col items-center gap-2 py-12 text-center text-muted-foreground">
-          <Camera className="size-10" strokeWidth={1.5} />
-          <p className="text-sm">No posts yet.</p>
-        </div>
+        <PostsGrid
+          username={user.username}
+          emptyState={
+            <EmptyState
+              icon={ImagePlus}
+              title="No posts yet"
+              description="Share your first photo to get started."
+              action={
+                <Button onClick={openComposer}>Create your first post</Button>
+              }
+            />
+          }
+        />
       </div>
     </div>
   );

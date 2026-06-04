@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import { Heart, Home, Search, SquarePlus, User, type LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useComposerStore } from '@/stores/composerStore';
 
 interface BottomEntry {
   label: string;
@@ -17,6 +18,8 @@ const ITEMS: BottomEntry[] = [
 ];
 
 export default function BottomNav() {
+  const openComposer = useComposerStore((s) => s.open);
+
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 flex h-16 items-center justify-around border-t bg-background/80 backdrop-blur md:hidden">
       {ITEMS.map(({ label, icon: Icon, to }) => {
@@ -34,27 +37,43 @@ export default function BottomNav() {
             />
           );
 
-        return to ? (
-          <NavLink
-            key={label}
-            to={to}
-            end={to === '/'}
-            aria-label={label}
-            className="flex items-center justify-center p-2"
-          >
-            {({ isActive }) => inner(isActive)}
-          </NavLink>
-        ) : (
+        if (to) {
+          return (
+            <NavLink
+              key={label}
+              to={to}
+              end={to === '/'}
+              aria-label={label}
+              className="flex items-center justify-center p-2"
+            >
+              {({ isActive }) => inner(isActive)}
+            </NavLink>
+          );
+        }
+
+        // "Create" opens the composer; the other placeholders stay disabled.
+        if (isCreate) {
+          return (
+            <button
+              key={label}
+              type="button"
+              aria-label={label}
+              onClick={openComposer}
+              className="flex items-center justify-center p-2"
+            >
+              {inner()}
+            </button>
+          );
+        }
+
+        return (
           <button
             key={label}
             type="button"
             disabled
             aria-disabled="true"
             aria-label={label}
-            className={cn(
-              'flex items-center justify-center p-2',
-              !isCreate && 'cursor-not-allowed opacity-60'
-            )}
+            className="flex cursor-not-allowed items-center justify-center p-2 opacity-60"
           >
             {inner()}
           </button>

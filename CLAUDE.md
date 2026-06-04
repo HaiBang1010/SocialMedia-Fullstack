@@ -53,7 +53,7 @@ Mỗi sub-folder có CLAUDE.md riêng — đọc khi làm việc trong folder đ
 
 ### Git workflow
 - Conventional Commits: `feat:`, `fix:`, `refactor:`, `chore:`, `docs:`, `test:`
-- KHÔNG commit thẳng vào `main` — luôn qua feature branch nếu user nói tới Git
+- Commit thẳng vào `main` (solo dev) — KHÔNG bắt buộc feature branch; chỉ tách branch khi user yêu cầu
 - KHÔNG bao giờ commit `.env`, `node_modules/`, `dist/`, `prisma/migrations/dev.db*`
 
 ### Security / data

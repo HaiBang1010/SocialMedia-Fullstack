@@ -6,6 +6,35 @@
 
 ---
 
+## 2026-06-04 — Checkpoint 2.4c: Post composer (5-step modal) + Profile real posts grid
+
+**Done:**
+- Post composer 5-step modal (`Select → Crop → Caption → Upload → Done`), Zustand `composerStore` global (3 trigger: Sidebar Create, BottomNav Create, Profile empty-state), render 1 instance ở `AppLayout`. Hand-roll, KHÔNG thêm dependency.
+- Crop UI hand-rolled bằng Canvas API + pointer events (KHÔNG dùng library): cover-fit base scale × zoom + drag-reposition, 3 aspect ratio (1:1 / 4:5 / 1.91:1), export `canvas.toBlob` (≤1080w, quality 0.9). Geometry tách `lib/cropImage.ts` (pure), interaction ở `CropStage.tsx`.
+- `useCreatePost` orchestrate presign → PUT (progress) → POST /posts; `onSuccess` seed `post(id)` cache + invalidate `userPosts(me.username)`. CỐ TÌNH không đụng feed cache (feed = following-only, post của mình không thuộc feed mình).
+- ProfilePage refactor: posts grid thật qua `useUserPosts` (`PostsGrid` 3-col, hover overlay like/comment count, infinite scroll), posts count thật. Empty state → CTA "Create your first post" mở composer.
+- Client media validation MATCH backend exact (5 MIME + 10MB) chạy TRƯỚC presign (`lib/image.ts validateMediaFile`), tránh waste API call. Error tiếng Anh.
+- Bug fix (routing, mobile): `PostDetailPage` nút Back `navigate('/')` → `navigate(-1)` — page mode mobile vào từ profile click post, Back giờ về đúng trang nguồn thay vì luôn về Feed.
+
+**Lưu ý kỹ thuật:**
+- **contentType threading** (rủi ro #1): giá trị MIME phải khớp 3 chỗ — `mediaApi.presign({contentType})`, `Content-Type` của PUT (wrap blob thành `File` đúng type), và blob thực. Crop PNG→JPEG ⇒ presign + upload đều `image/jpeg`, KHÔNG `image/png`; nguồn WebP giữ `image/webp`. Lệch → S3 từ chối signature.
+- **GIF/AVIF passthrough**: gated bằng `PASSTHROUGH_MIME`, KHÔNG qua canvas (re-encode mất animation GIF + AVIF decode không ổn định) → upload file gốc, chỉ đo dimensions. Croppable (jpeg/png/webp) mới qua canvas.
+- **width/height đo client-side** (`getImageDimensions` createImageBitmap + fallback `Image()`) → gửi `media[].width/height` để feed/grid render đúng aspect (clamp [0.8, 1.91] đã có từ 2.4b). Crop output dùng `canvas.width/height`.
+- **Không optimistic post**: khác like/comment, post mới chưa có real id/url khi submit → reconcile temp-id trong cursor list dễ vỡ. Chỉ invalidate sau success (theo pattern `useCreateComment.onSuccess`).
+- Composer mobile full-screen (`h-[100dvh] max-w-none rounded-none` < sm), reuse shell `ui/dialog` (Radix lo focus-trap/ESC/overlay) như `PostDetailModal`.
+- **Step 0 doc-sync**: `CLAUDE.md` Git workflow rule đổi "luôn qua feature branch" → "commit thẳng main (solo dev)" cho khớp reality 2.4a (các checkpoint đã commit thẳng main). Sửa luôn dấu vết "feature branch" stale ở PROGRESS.md entry 2.4b.
+
+**Tech debt phát sinh (đề xuất BACKLOG, chờ confirm):**
+- `[frontend/profile]` followers/following count = `0` placeholder (backend chưa có total-count endpoint, chỉ list cursor). Posts count cũng là loaded-count + "+" khi còn page, không phải total thật. Defer Phase 2.5 (cần count API).
+- `[frontend/composer]` Đóng modal giữa lúc upload (`phase=uploading`) chỉ abort PUT ngầm, không confirm — orphan S3 object có thể phát sinh (best-effort storage, acceptable). Cân nhắc confirm-before-close.
+- `[frontend/profile]` Public profile route `/users/:username` vẫn chưa có (tech debt 2.4b) — ProfilePage còn own-profile only.
+
+**Verify:** 11/11 functional PASS (T1-T11: 3 trigger mở modal, validate reject sai MIME/>10MB không gọi presign, crop 3 ratio + drag/zoom, back/next giữ-clear state, submit presign→PUT→POST đúng thứ tự + contentType khớp, grid update + count +1, view post pre-seeded, error retry không post ma, dark mode + mobile full-screen, GIF passthrough còn animation, object-URL leak revoke). Bug routing mobile fixed + verify. `tsc -b` + `vite build` 0 lỗi.
+
+**Next:** Phase 2.5 — follow button + `useFollow`, edit/delete comment, public profile route `/users/:username`, followers/following count API. Sau đó tag `phase-2-frontend-complete`.
+
+---
+
 ## 2026-06-03 — Checkpoint 2.4b: Frontend posts UI (feed + PostCard + PostDetail + like/comment)
 
 **Done:**
@@ -28,7 +57,7 @@
 - `[frontend/feed]` Chưa dedupe post `id` khi `flatMap` các page infinite — nếu cursor backend trả trùng (post chèn giữa lúc paginate) → duplicate React key. Cân nhắc dedupe theo id.
 - `[frontend/post]` Share/Save (PostActions) vẫn disabled placeholder — wire Phase sau.
 
-**Next:** Commit 2.4b (feature branch) sau khi verify browser-interactive (feed/like/comment/modal desktop+mobile/dark mode/logout-switch-user/comment newest-first). Sau đó 2.4c: follow button + `useFollow`, create-post composer (presigned upload UI), profile real posts grid, edit/delete comment.
+**Next:** Commit 2.4b (commit thẳng main) sau khi verify browser-interactive (feed/like/comment/modal desktop+mobile/dark mode/logout-switch-user/comment newest-first). Sau đó 2.4c: follow button + `useFollow`, create-post composer (presigned upload UI), profile real posts grid, edit/delete comment.
 
 ---
 

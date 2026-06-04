@@ -14,13 +14,15 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
+import { useComposerStore } from "@/stores/composerStore";
 import ThemeToggle from "@/components/ThemeToggle";
 
 interface NavEntry {
   label: string;
   icon: LucideIcon;
-  // `to` present → real NavLink; absent → disabled placeholder (Phase 2).
+  // `to` → real NavLink; `action` → button handler; neither → disabled (Phase 2+).
   to?: string;
+  action?: "create";
 }
 
 const NAV: NavEntry[] = [
@@ -30,7 +32,7 @@ const NAV: NavEntry[] = [
   { label: "Reels", icon: Film },
   { label: "Messages", icon: Send },
   { label: "Notifications", icon: Heart },
-  { label: "Create", icon: SquarePlus },
+  { label: "Create", icon: SquarePlus, action: "create" },
   { label: "Profile", icon: User, to: "/profile" },
 ];
 
@@ -49,6 +51,7 @@ export default function Sidebar() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const openComposer = useComposerStore((s) => s.open);
 
   const handleLogout = () => {
     logout();
@@ -64,24 +67,42 @@ export default function Sidebar() {
 
       {/* Nav */}
       <nav className="mt-8 flex flex-1 flex-col gap-1">
-        {NAV.map(({ label, icon: Icon, to }) =>
-          to ? (
-            <NavLink
-              key={label}
-              to={to}
-              end={to === "/"}
-              className={({ isActive }) =>
-                cn(ROW, "hover:bg-muted", isActive && "font-bold text-primary")
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <Icon strokeWidth={isActive ? 2.5 : 2} />
-                  <span>{label}</span>
-                </>
-              )}
-            </NavLink>
-          ) : (
+        {NAV.map(({ label, icon: Icon, to, action }) => {
+          if (to) {
+            return (
+              <NavLink
+                key={label}
+                to={to}
+                end={to === "/"}
+                className={({ isActive }) =>
+                  cn(ROW, "hover:bg-muted", isActive && "font-bold text-primary")
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <Icon strokeWidth={isActive ? 2.5 : 2} />
+                    <span>{label}</span>
+                  </>
+                )}
+              </NavLink>
+            );
+          }
+
+          if (action === "create") {
+            return (
+              <button
+                key={label}
+                type="button"
+                onClick={openComposer}
+                className={cn(ROW, "hover:bg-muted")}
+              >
+                <Icon />
+                <span>{label}</span>
+              </button>
+            );
+          }
+
+          return (
             <button
               key={label}
               type="button"
@@ -92,8 +113,8 @@ export default function Sidebar() {
               <Icon />
               <span>{label}</span>
             </button>
-          ),
-        )}
+          );
+        })}
       </nav>
 
       {/* Bottom section */}

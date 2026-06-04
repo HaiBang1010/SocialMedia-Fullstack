@@ -2,6 +2,7 @@ import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import RightRail from './RightRail';
 import BottomNav from './BottomNav';
+import PostComposerModal from '@/components/post/PostComposerModal';
 
 export default function AppLayout() {
   return (
@@ -13,6 +14,8 @@ export default function AppLayout() {
       </main>
       <RightRail />
       <BottomNav />
+      {/* Global post composer — opened from Sidebar / BottomNav / Profile. */}
+      <PostComposerModal />
     </div>
   );
 }
