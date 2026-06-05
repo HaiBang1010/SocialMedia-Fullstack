@@ -1,5 +1,7 @@
+import { PostVisibility } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/error';
+import { isFollowing } from '../follows/follows.service';
 import type { UpdateProfileInput } from './users.schema';
 
 // Exported để các module khác (vd posts) reuse cho phần `author` —
@@ -14,17 +16,62 @@ export const publicUserSelect = {
   createdAt: true,
 } as const;
 
-export async function getUserByUsername(username: string) {
+/**
+ * Public profile DTO for GET /users/:username — the 7 public fields plus social
+ * counts and the viewer's follow relationship. `viewerId` is the (optional) id
+ * of the requester (optionalAuth on the route).
+ *
+ * - followersCount / followingCount: full counts (viewer-independent).
+ * - postsCount: mirrors what the profile grid (listPostsByUsername) actually
+ *   shows — same visibility gating, incl. private-account hiding for non-followers.
+ * - isFollowing: null for an anonymous viewer OR self (backend doesn't compute a
+ *   self-follow); true/false for a logged-in non-self viewer.
+ */
+export async function getUserProfile(username: string, viewerId?: string) {
   const user = await prisma.user.findUnique({
     where: { username },
-    select: publicUserSelect,
+    select: {
+      ...publicUserSelect,
+      _count: { select: { followers: true, following: true } },
+    },
   });
 
   if (!user) {
     throw new AppError(404, 'UserNotFound', 'User not found');
   }
 
-  return user;
+  const isOwner = viewerId === user.id;
+
+  // Single follow lookup, reused for both postsCount gating and the isFollowing field.
+  let viewerFollows = false;
+  if (viewerId && !isOwner) {
+    viewerFollows = await isFollowing(viewerId, user.id);
+  }
+
+  // Same gating as listPostsByUsername: a private account hides its posts from
+  // non-owner non-followers entirely → count 0; otherwise count by allowed visibility.
+  const privateHidden = user.isPrivate && !isOwner && !viewerFollows;
+  const allowedVisibility: PostVisibility[] = isOwner
+    ? ['PUBLIC', 'FOLLOWERS', 'PRIVATE']
+    : viewerFollows
+      ? ['PUBLIC', 'FOLLOWERS']
+      : ['PUBLIC'];
+
+  const postsCount = privateHidden
+    ? 0
+    : await prisma.post.count({
+        where: { authorId: user.id, visibility: { in: allowedVisibility } },
+      });
+
+  const { _count, ...publicFields } = user;
+
+  return {
+    ...publicFields,
+    postsCount,
+    followersCount: _count.followers,
+    followingCount: _count.following,
+    isFollowing: !viewerId || isOwner ? null : viewerFollows,
+  };
 }
 
 export async function updateProfile(userId: string, input: UpdateProfileInput) {

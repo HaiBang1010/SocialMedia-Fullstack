@@ -107,7 +107,7 @@ router.post('/x', validate(xSchema), asyncHandler(async (req, res) => {
 | POST | `/auth/refresh` | - | xin access token mới |
 | GET | `/auth/me` | ✓ | user hiện tại |
 | POST | `/auth/logout` | - | placeholder |
-| GET | `/users/:username` | - | profile public |
+| GET | `/users/:username` | optional | profile public + counts (posts/followers/following) + isFollowing |
 | GET | `/users/:username/posts` | optional | list post của user (cursor pagination) |
 | PATCH | `/users/me` | ✓ | sửa profile |
 | POST | `/media/presign` | ✓ | xin presigned URL upload |
@@ -133,6 +133,7 @@ Khi thêm endpoint mới, update bảng trên.
 > **Visibility (follow-aware)**: GET 1 post / list — PUBLIC ai cũng xem; FOLLOWERS chỉ owner + follower; PRIVATE chỉ owner. Non-owner không đủ điều kiện → **404** (ẩn existence), không 403. Gate dùng chung `getViewablePost` (posts.service). Write (PATCH/DELETE) bởi non-owner → 403. Feed loại PRIVATE.
 > **Post DTO**: mọi response trả post (single/list/feed) đi qua `serializePost` → kèm `likesCount`, `commentsCount`, `isLikedByMe`, `isFollowingAuthor`.
 > **`optionalAuth`** (middleware/auth.ts): verify token nếu có, KHÔNG 401 nếu thiếu — dùng cho route public cần biết viewer.
+> **Profile DTO** (`GET /users/:username` → `getUserProfile`): trả `publicUserSelect` (7 field, KHÔNG email) + `postsCount/followersCount/followingCount` + `isFollowing`. `isFollowing` = `null` cho anonymous HOẶC self (backend không tự-follow), `true/false` cho viewer logged-in non-self (reuse `isFollowing()` của follows). `postsCount` **mirror grid** = cùng visibility gating với `listPostsByUsername` (private account + non-owner + non-follower → 0; follower → PUBLIC+FOLLOWERS; ngoài → PUBLIC; owner → cả 3). Schema riêng `userProfileSchema` (KHÁC `userPublicSchema` self có email).
 
 ## Khi thêm feature mới
 

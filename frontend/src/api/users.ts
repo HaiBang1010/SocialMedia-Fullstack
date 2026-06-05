@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import type { UserResponse } from '@/types/api';
+import type { ProfileResponse, UserResponse } from '@/types/api';
 
 export interface UpdateProfileInput {
   name?: string;
@@ -9,8 +9,9 @@ export interface UpdateProfileInput {
 }
 
 export const usersApi = {
-  getByUsername: async (username: string): Promise<UserResponse> => {
-    const { data } = await apiClient.get<UserResponse>(`/users/${username}`);
+  // GET /users/:username → public profile DTO (counts + isFollowing).
+  getByUsername: async (username: string): Promise<ProfileResponse> => {
+    const { data } = await apiClient.get<ProfileResponse>(`/users/${username}`);
     return data;
   },
 

@@ -6,6 +6,30 @@
 
 ---
 
+## 2026-06-06 — Checkpoint 2.5: Follow button + Profile counts + public profile route
+
+**Done:**
+- **Backend**: `GET /users/:username` từ 7-field public → **ProfileUser DTO** (+ `postsCount/followersCount/followingCount` + `isFollowing: boolean|null`). Rename `getUserByUsername` → `getUserProfile(username, viewerId?)` (gắn `optionalAuth` vào route). Reuse `isFollowing()` helper (2.3b-1) + mirror visibility gating của `listPostsByUsername`. Schema riêng `userProfileSchema` (tách khỏi self `userPublicSchema` có email). KHÔNG migration (Follow đã đủ index 2 chiều).
+- **Frontend types**: thêm `ProfileUser` (extends `PublicUser`) + `ProfileResponse`. `PublicUser` GIỮ 7 field (không phình — vẫn là post/comment author + list item).
+- **Hooks** `features/users/`: `useUserProfile` (`useQuery` + `select` unwrap, cache giữ envelope để patch). `followMutation` engine (mirror `likeMutation`) → `useFollow`/`useUnfollow`: optimistic toggle `isFollowing` + `followersCount ±1`, rollback `onError`, **invalidate `user(username)` onSettled** reconcile count (follow response chỉ `{ following }`).
+- **UI**: `FollowButton` (Follow coral / Following outline → hover Unfollow đỏ / pending disabled). `ProfileEditForm` extract ra component riêng. `UserProfilePage` merge từ `ProfilePage` (xóa file cũ): 1 component handle self (Edit profile) + other (FollowButton), stats THẬT qua `formatNumber`.
+- **Routing**: `/users/:username` (public profile) + `/profile` → `ProfileRedirect` (→ `/users/<me>`). Author (avatar + @username) ở `PostCard`/`PostDetailView`/`CommentItem` → `<Link>` profile → giải tech-debt 2.4b (author chưa clickable) + làm Follow reachable in-app.
+
+**Lưu ý kỹ thuật:**
+- **Circular import** `users.service` ↔ `follows.service` (follows import `publicUserSelect`, users import `isFollowing`): an toàn vì cả 2 dùng ở call-time, KHÔNG top-level — pattern y hệt `posts.service` đang chạy ổn.
+- **postsCount = mirror grid** (chốt khi plan): private account + non-owner + non-follower → **0** (giống `listPostsByUsername` trả empty), KHÔNG đếm PUBLIC trơ — tránh "header ghi N posts nhưng grid trống". Owner: cả 3 visibility; follower: PUBLIC+FOLLOWERS; ngoài: PUBLIC.
+- **isFollowing = null** cho anonymous HOẶC self → FollowButton chỉ render khi `!== null` + `!isSelf`. isSelf dùng `me.username === username` (rõ hơn dựa null).
+- **Count reconcile**: follow response KHÔNG kèm count (khác like) → optimistic + invalidate `onSettled`. Profile 1 fetch nhẹ, không mất scroll.
+- **Follow scope hẹp**: chỉ patch `user(username)` cache; KHÔNG đụng feed → `post.isFollowingAuthor`/feed membership stale tới refetch tự nhiên (chấp nhận, ngoài scope).
+
+**Tech debt giải quyết:** followers/following placeholder `0` (2.4c), public profile route `/users/:username` chưa có (2.4b), author name chưa clickable (2.4b) — cả 3 DONE.
+
+**Verify:** Backend e2e curl PASS — isFollowing null/false/true, followersCount tăng đúng, không lộ email; postsCount self=2 (all), non-follower public=1 (PUBLIC), non-follower private=0 (mirror grid), follower=2 (PUBLIC+FOLLOWERS). `tsc -b` backend + frontend + `vite build` 0 lỗi. **Browser-interactive chờ user test** (redirect /profile, self vs other, follow optimistic + rollback offline, dark/mobile).
+
+**Next:** Browser verify → commit. Sau đó cân nhắc followers/following list pages (2.6) hoặc tag `phase-2-frontend-complete`.
+
+---
+
 ## 2026-06-04 — Checkpoint 2.4c: Post composer (5-step modal) + Profile real posts grid
 
 **Done:**

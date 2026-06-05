@@ -1,12 +1,13 @@
 import { z } from 'zod';
 import type { OpenAPIRegistry } from '@asteasolutions/zod-to-openapi';
-import { updateProfileSchema } from './users.schema';
+import { updateProfileSchema, userProfileSchema } from './users.schema';
 import {
   errorResponseSchema,
   validationErrorResponseSchema,
   userPublicSchema,
 } from '../../lib/openapi';
 
+// PATCH /users/me returns the self user (with email).
 const userResponseSchema = z.object({ user: userPublicSchema });
 
 const json = <T extends z.ZodTypeAny>(schema: T) => ({
@@ -27,6 +28,10 @@ const notFound404 = {
 };
 
 export function registerUsersOpenApi(registry: OpenAPIRegistry) {
+  // GET /users/:username returns the public profile DTO (counts + isFollowing).
+  const UserProfile = registry.register('UserProfile', userProfileSchema);
+  const profileResponseSchema = z.object({ user: UserProfile });
+
   registry.registerPath({
     method: 'patch',
     path: '/users/me',
@@ -46,13 +51,19 @@ export function registerUsersOpenApi(registry: OpenAPIRegistry) {
     path: '/users/{username}',
     tags: ['Users'],
     summary: 'Get a public user profile by username',
+    description:
+      'Public profile with social counts and the viewer\'s follow relationship. ' +
+      'Send a bearer token to be recognized: isFollowing is null for anonymous ' +
+      'viewers or self, and postsCount honors the viewer\'s post visibility.',
+    // Optional auth: viewer identity gates isFollowing + postsCount visibility.
+    security: [{ bearerAuth: [] }, {}],
     request: {
       params: z.object({
         username: z.string().openapi({ example: 'alice' }),
       }),
     },
     responses: {
-      200: { description: 'Public user profile', ...json(userResponseSchema) },
+      200: { description: 'Public user profile', ...json(profileResponseSchema) },
       404: notFound404,
     },
   });

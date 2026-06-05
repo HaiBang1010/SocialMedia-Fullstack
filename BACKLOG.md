@@ -45,6 +45,14 @@
 
 ## DONE
 
+- 2026-06-06 [frontend/profile] Followers/following count placeholder `0` →
+  count THẬT — Checkpoint 2.5. Backend `GET /users/:username` trả ProfileUser
+  (postsCount/followersCount/followingCount + isFollowing). postsCount mirror grid.
+- 2026-06-06 [frontend/profile] Public profile route `/users/:username` —
+  Checkpoint 2.5. `UserProfilePage` (merge từ ProfilePage), `/profile` redirect.
+  Follow button (optimistic + invalidate onSettled).
+- 2026-06-06 [frontend/post] Author name/avatar clickable → `/users/:username` —
+  Checkpoint 2.5. Wire `<Link>` ở PostCard/PostDetailView/CommentItem.
 - 2026-06-03 [frontend/feed] Infinite scroll feed (useInfiniteQuery +
   IntersectionObserver, không phân trang button) — Checkpoint 2.4b. Hand-roll
   `useInfiniteScroll` (no dep). Dùng chung FeedPage + CommentList.

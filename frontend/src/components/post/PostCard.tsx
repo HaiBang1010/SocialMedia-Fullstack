@@ -19,17 +19,20 @@ export default function PostCard({ post }: PostCardProps) {
   const isDesktop = useIsDesktop();
 
   const { author } = post;
+  const authorTo = `/users/${author.username}`;
   const detailTo = `/posts/${post.id}`;
   const detailState = isDesktop ? { background: location } : undefined;
   const openDetail = () => navigate(detailTo, { state: detailState });
 
   return (
     <article className="overflow-hidden rounded-xl border bg-card">
-      <header className="flex items-center gap-3 px-4 py-3">
-        <Avatar user={author} size="sm" />
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold">@{author.username}</div>
-        </div>
+      <header className="flex items-center px-4 py-3">
+        <Link to={authorTo} className="flex min-w-0 items-center gap-3">
+          <Avatar user={author} size="sm" />
+          <span className="truncate text-sm font-semibold hover:underline">
+            @{author.username}
+          </span>
+        </Link>
       </header>
 
       {post.media.length > 0 && (
@@ -59,7 +62,9 @@ export default function PostCard({ post }: PostCardProps) {
       <div className="space-y-1 px-4 pb-4 text-sm">
         {post.caption && (
           <div>
-            <span className="font-semibold">@{author.username}</span>{' '}
+            <Link to={authorTo} className="font-semibold hover:underline">
+              @{author.username}
+            </Link>{' '}
             <span className="whitespace-pre-line">{post.caption}</span>
           </div>
         )}

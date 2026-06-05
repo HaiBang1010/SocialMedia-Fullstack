@@ -27,12 +27,14 @@ router.patch(
 
 /**
  * GET /users/:username
- * Public — xem profile của bất kỳ user nào.
+ * Public — xem profile của bất kỳ user nào. optionalAuth: viewer identity quyết
+ * định `isFollowing` + visibility gating của postsCount.
  */
 router.get(
   '/:username',
+  optionalAuth,
   asyncHandler(async (req, res) => {
-    const user = await usersService.getUserByUsername(req.params.username);
+    const user = await usersService.getUserProfile(req.params.username, req.user?.id);
     res.json({ user });
   })
 );

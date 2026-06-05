@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { usePost } from '@/features/posts/hooks/usePost';
 import { getStatus } from '@/lib/apiError';
 import { formatRelativeTime } from '@/lib/format';
@@ -45,6 +46,7 @@ export default function PostDetailView({ postId }: PostDetailViewProps) {
   }
 
   const { author } = post;
+  const authorTo = `/users/${author.username}`;
   const hasMedia = post.media.length > 0;
   const focusComment = () =>
     document.getElementById(COMMENT_INPUT_ID)?.focus();
@@ -67,20 +69,26 @@ export default function PostDetailView({ postId }: PostDetailViewProps) {
       )}
 
       <div className="flex min-h-0 flex-col md:max-h-[85vh]">
-        <header className="flex items-center gap-3 border-b px-4 py-3">
-          <Avatar user={author} size="sm" />
-          <div className="min-w-0 flex-1 truncate text-sm font-semibold">
-            @{author.username}
-          </div>
+        <header className="flex items-center border-b px-4 py-3">
+          <Link to={authorTo} className="flex min-w-0 items-center gap-3">
+            <Avatar user={author} size="sm" />
+            <span className="truncate text-sm font-semibold hover:underline">
+              @{author.username}
+            </span>
+          </Link>
         </header>
 
         {/* Scrollable: caption (as the first entry) + comments */}
         <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4 md:min-h-0">
           {post.caption && (
             <div className="flex gap-3 text-sm">
-              <Avatar user={author} size="sm" />
+              <Link to={authorTo}>
+                <Avatar user={author} size="sm" />
+              </Link>
               <div className="min-w-0 flex-1">
-                <span className="font-semibold">@{author.username}</span>{' '}
+                <Link to={authorTo} className="font-semibold hover:underline">
+                  @{author.username}
+                </Link>{' '}
                 <span className="break-words whitespace-pre-line">
                   {post.caption}
                 </span>

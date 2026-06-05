@@ -26,6 +26,18 @@ export interface User extends PublicUser {
   email?: string;
 }
 
+// Public profile DTO — only GET /users/:username returns this. PublicUser + social
+// counts + the viewer's follow relationship. Kept separate from PublicUser so the
+// lean 7-field shape (post.author / comment.author / list items) doesn't bloat.
+// isFollowing: null for an anonymous viewer or self; true/false for a logged-in
+// non-self viewer. postsCount mirrors what the profile grid actually shows.
+export interface ProfileUser extends PublicUser {
+  postsCount: number;
+  followersCount: number;
+  followingCount: number;
+  isFollowing: boolean | null;
+}
+
 // ── Auth ───────────────────────────────────────────────────────────────
 
 export interface AuthTokens {
@@ -45,9 +57,15 @@ export interface RefreshResponse {
   accessToken: string;
 }
 
-// GET /auth/me, GET /users/:username, PATCH /users/me — Phase 1 wraps `{ user }`.
+// GET /auth/me, PATCH /users/me — Phase 1 wraps `{ user }` (self, may include email).
 export interface UserResponse {
   user: User;
+}
+
+// GET /users/:username — wraps the public profile DTO. Also `{ user }`, but the
+// user is a ProfileUser (counts + isFollowing), not the self User.
+export interface ProfileResponse {
+  user: ProfileUser;
 }
 
 // ── Posts ──────────────────────────────────────────────────────────────

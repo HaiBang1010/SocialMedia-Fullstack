@@ -7,7 +7,7 @@
 
 App name: Beng
 
-Instagram-like social media platform, mục đích học full-stack. Solo dev. Phase 1 xong (backend auth + frontend foundation/auth UI/design system). Phase 2 BACKEND xong (posts/media/follow/like/comment + feed API); kế tiếp Phase 2 FRONTEND (posts UI).
+Instagram-like social media platform, mục đích học full-stack. Solo dev. Phase 1 xong (backend auth + frontend foundation/auth UI/design system). Phase 2 BACKEND xong (posts/media/follow/like/comment + feed API). Phase 2 FRONTEND: 2.4a/b/c (posts UI) + 2.5 (follow + profile counts + public profile) xong.
 
 ## Cấu trúc
 
@@ -80,7 +80,8 @@ Mỗi sub-folder có CLAUDE.md riêng — đọc khi làm việc trong folder đ
 | 1B. Frontend auth UI (login/register/profile form) | ✅ Xong |
 | 1C. Design system "Beng" + layout shell + dark mode | ✅ Xong |
 | 2. Posts core — BACKEND (posts CRUD, MinIO upload, follow, like, comment phẳng, feed API) | ✅ Xong |
-| 2 (Frontend). Posts UI (feed, post card, create post, profile grid, like/comment/follow) | Chưa bắt đầu |
+| 2.4a/b/c (Frontend). Posts UI (data layer, feed, post card, like/comment, composer, profile grid) | ✅ Xong |
+| 2.5 (Frontend). Follow button + profile counts + public profile route `/users/:username` | ✅ Xong |
 | 3-7 | Chưa bắt đầu |
 
 Khi bạn (Claude) thấy task ngoài phase hiện tại — hỏi user có muốn skip ahead không.

@@ -149,3 +149,17 @@ Backend-integration plumbing cho posts/feed/comments/likes/follows/media. **KHÔ
 > **Comment list order**: **newest-first** (`createdAt` DESC) — comment mới nhất ở ĐẦU list, scroll xuống = comment cũ hơn (next page). `useCreateComment` optimistic **PREPEND** vào `pages[0]` (KHÔNG append cuối). Backend `comments.service` `orderBy [createdAt desc, id desc]`. (Đổi từ ASC/oldest-first ở 2.4b — quyết định UX: user thấy comment mình vừa gửi ngay không cần scroll.) Caption post (intrinsic) vẫn render ở header trên cùng, không nằm trong comment list.
 
 > **Next 2.4b**: mutation hooks (`useLikePost`/`useFollow`/`useCreateComment`/`useCreatePost`…) + optimistic update + rollback (helper patch-post-across-caches) + UI (PostCard, FeedPage, Composer, profile grid). Giá trị client-side media validation chốt tại đây.
+
+## Phase 2.5 — Follow button + Profile counts (public profile) — DONE
+
+Profile thật cho MỌI user (self + other) qua 1 endpoint, Follow button optimistic, public route.
+
+- [x] **1 endpoint** `GET /users/:username` trả `ProfileUser` (`types/api.ts`: `PublicUser` + `postsCount/followersCount/followingCount` + `isFollowing: boolean|null`). `PublicUser` GIỮ 7 field (vẫn là `post.author`/`comment.author`/list item — KHÔNG phình). `api/users.getByUsername` retype `ProfileResponse`.
+- [x] `features/users/hooks/`: `useUserProfile` (`useQuery` + `select: res => res.user`, cache lưu envelope `{ user }` để follow patch được). `followMutation` engine (mirror `likeMutation`) → `useFollow`/`useUnfollow`. Optimistic toggle `isFollowing` + `followersCount ±1` (idempotent guard), rollback `onError`, **`invalidateQueries(user(username))` `onSettled`** để reconcile count authoritative (follow response chỉ `{ following }`, KHÔNG kèm count).
+- [x] `components/profile/`: `FollowButton` (Follow coral / Following outline → hover Unfollow đỏ, disabled khi pending). `ProfileEditForm` extract khỏi page cũ (named export).
+- [x] `pages/UserProfilePage` (merge từ `ProfilePage` đã xóa): `useParams().username`, `isSelf = me.username === username`. Self → "Edit profile" (onSaved: `updateUser` + invalidate `user(me)`); other → `FollowButton` (chỉ render khi `isFollowing !== null`). Grid reuse `PostsGrid username`. Empty state self có CTA, other không.
+- [x] Routing (`App.tsx`): `/users/:username` → `UserProfilePage`; `/profile` → `<ProfileRedirect>` (đọc authStore → `Navigate /users/<me>`). Nav links GIỮ `/profile` (redirect lo). Author (avatar+@username) ở `PostCard`/`PostDetailView`/`CommentItem` → `<Link to=/users/:username>` (giải tech-debt 2.4b author chưa clickable).
+
+> **isSelf detection**: dùng `me.username === username` (KHÔNG dựa `isFollowing === null` — null cũng là anonymous, nhưng route protected nên null ⇒ self; vẫn ưu tiên username compare cho rõ).
+> **Follow scope**: mutation CHỈ patch cache `user(username)`. KHÔNG đụng feed → `post.isFollowingAuthor` + feed membership có thể stale tới refetch tự nhiên (chấp nhận, ngoài scope 2.5).
+> **Counts authoritative**: stats header (`postsCount/...`) qua `formatNumber` (compact). `postsCount` từ backend đã mirror grid visibility — KHÔNG còn là loaded-count + "+" như 2.4c.

@@ -1,15 +1,29 @@
-import { Routes, Route, useLocation, type Location } from 'react-router-dom';
+import {
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+  type Location,
+} from 'react-router-dom';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import PublicOnlyRoute from '@/components/PublicOnlyRoute';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthLayout from '@/components/layout/AuthLayout';
 import { useThemeEffect } from '@/hooks/useThemeEffect';
+import { useAuthStore } from '@/stores/authStore';
 import FeedPage from '@/pages/FeedPage';
 import LoginPage from '@/pages/LoginPage';
 import RegisterPage from '@/pages/RegisterPage';
-import ProfilePage from '@/pages/ProfilePage';
+import UserProfilePage from '@/pages/UserProfilePage';
 import PostDetailPage from '@/pages/PostDetailPage';
 import PostDetailModal from '@/components/post/PostDetailModal';
+
+// `/profile` is a stable alias for the current user's own profile URL. It lives
+// under ProtectedRoute, so a user always exists here.
+function ProfileRedirect() {
+  const username = useAuthStore((s) => s.user?.username);
+  return <Navigate to={username ? `/users/${username}` : '/login'} replace />;
+}
 
 export default function App() {
   // Keep <html> `.dark` class in sync with the theme store.
@@ -35,7 +49,8 @@ export default function App() {
         <Route element={<ProtectedRoute />}>
           <Route element={<AppLayout />}>
             <Route path="/" element={<FeedPage />} />
-            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/profile" element={<ProfileRedirect />} />
+            <Route path="/users/:username" element={<UserProfilePage />} />
             <Route path="/posts/:id" element={<PostDetailPage />} />
           </Route>
         </Route>
