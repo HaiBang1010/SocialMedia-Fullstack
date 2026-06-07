@@ -10,7 +10,8 @@ import { buildOpenApiDocument } from "./lib/openapi";
 import authRoutes from "./modules/auth/auth.routes";
 import usersRoutes from "./modules/users/users.routes";
 import mediaRoutes from "./modules/media/media.routes";
-import postsRoutes, { commentsRouter } from "./modules/posts/posts.routes";
+import postsRoutes from "./modules/posts/posts.routes";
+import commentsRoutes from "./modules/comments/comments.routes";
 import feedRoutes from "./modules/feed/feed.routes";
 
 const app = express();
@@ -55,7 +56,7 @@ app.use("/auth", authRoutes);
 app.use("/users", usersRoutes);
 app.use("/media", mediaRoutes);
 app.use("/posts", postsRoutes);
-app.use("/comments", commentsRouter);
+app.use("/comments", commentsRoutes);
 app.use("/feed", feedRoutes);
 
 // ── ERROR HANDLERS ────────────────────────────

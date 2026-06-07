@@ -1,6 +1,6 @@
 # Frontend — Project Memory
 
-> Phase 1A/1B/1C + Phase 2 FE (2.4a/b/c posts UI + 2.5 follow/profile counts/public profile) + Phase 3.1 (multi-image carousel) đã build xong. File này là rules + setup thực tế; xem các section "Phase 2.4a"/"Phase 2.5 — DONE"/"Phase 3.1 — DONE" cuối file cho chi tiết.
+> Phase 1A/1B/1C + Phase 2 FE (2.4a/b/c posts UI + 2.5 follow/profile counts/public profile) + Phase 3 FE (3.1 carousel + 3.2 video/delete/visibility + 3.3 nested comments) đã build xong. File này là rules + setup thực tế; xem các section "Phase 2.4a"/"Phase 2.5 — DONE"/"Phase 3.1 — DONE"/"Phase 3.3 — DONE" cuối file cho chi tiết.
 
 ## Stack versions (pinned)
 
@@ -177,3 +177,17 @@ Post từ 1 ảnh → carousel tối đa **5 ảnh**. Data model Phase 2 đã ca
 > **GIF/AVIF (passthrough) = single-image-only**: nếu selection có GIF/AVIF thì phải là ảnh DUY NHẤT (passthrough giữ framing gốc → không ép được shared ratio → vỡ height-stability). Chặn ở `SelectStage` (`currentHasPassthrough || (incomingPassthrough && (images.length>0 || valid.length>1))`).
 > **Orphan S3 on retry** (known debt): 1 trong N PUT fail → các ảnh đã upload trước thành orphan (POST /posts chưa chạy). Retry re-upload TẤT CẢ (objectKey mới → thêm orphan). Chấp nhận — khớp posts.service "orphan check để Phase polish".
 > **Caption-only**: composer vẫn yêu cầu ≥1 ảnh (parity Phase 2.4c); hook media-optional vẫn handle caption-only nếu gọi từ chỗ khác.
+
+## Phase 3.3 — Nested comments / replies — DONE
+
+Comment flat → IG-style nested (flatten 1 cấp) qua **split queries**. Backend tách `GET /posts/:id/comments` (root only + `repliesCount`) và `GET /comments/:id/replies` (lazy).
+
+- [x] **Types**: `Comment` thêm `repliesCount: number`; `CommentListResponse` (`{ comments, nextCursor }`) **reuse cho cả root lẫn replies**. `queryKeys.replies(commentId) = ['comments', commentId, 'replies']`. `commentsApi.listReplies(commentId, cursor?)`.
+- [x] **`lib/commentCache.ts`** (mirror `postCache.ts`, nhưng key exact KHÔNG cần predicate sweep): `bumpRepliesCount(qc, postId, rootId, ±1)` (clamp ≥0), `appendReply`/`removeReply` (replies cache), `removeRootComment` (comments cache), `snapshotCommentCaches`/`restoreCommentCaches` (comments(postId) + 1 replies(id)). `post.commentsCount` vẫn patch qua `postCache` (backend `_count.comments` đếm CẢ replies → mọi create/delete đều bump).
+- [x] **`lib/parseMentions.tsx`**: regex `/(?<!\w)@([A-Za-z0-9._]+)/g` (charset khớp username backend; lookbehind chặn `email@gmail.com`), strip trailing `.`/`_`, → `<Link text-primary>` (KHÔNG có `text-coral`). Render `{parseMentions(content)}` trong span, KHÔNG dangerouslySetInnerHTML.
+- [x] **Hooks**: `useReplies(commentId, enabled=true)` (infinite, chronological). `useCreateComment` refactor mutate var `{ content, parentId? }` — branch root (prepend) vs reply (append + bumpRepliesCount), cả 2 bump post.commentsCount. `useDeleteComment` (mutate `{ commentId, postId, parentId, repliesCount }`): reply → removeReply + repliesCount−1 + commentsCount−1; root → removeRootComment + commentsCount−(1+repliesCount) + onSuccess `removeQueries(replies(id))` (cascade). Optimistic + snapshot/rollback, KHÔNG invalidate list khi delete.
+- [x] **Components**: `CommentList` lift `replyingTo` state + đổi infinite-scroll sentinel → nút "View more comments" (`fetchNextPage`). `CommentItem` refactor lớn: actions Reply (mọi comment, disable trên `temp-`) + Delete (chỉ `me.id===author.id`, đổi từ post-author); root + `repliesCount>0` → "View N replies"/"Hide replies" toggle `showReplies`; click Reply trên root → auto-expand. `RepliesList` (mới, indent `border-l pl-3`) lazy `useReplies` + "View more replies" + inline `CommentForm` ở cuối khi `replyingTo.rootCommentId === commentId`. `CommentForm` thêm `parentId`/`parentUsername`/`onClose`/`inputId`/`autoFocus` — reply mode prefill "@user " + chip; **main form gắn `inputId=COMMENT_INPUT_ID`, reply form dùng `autoFocus`** (tránh id collision). `CommentDeleteConfirmDialog` (mới) chỉ bật khi xóa root CÓ replies (cảnh báo cascade); còn lại delete instant.
+
+> **Circular import có chủ ý** `CommentItem ↔ RepliesList` (item render RepliesList khi expand; RepliesList render item cho mỗi reply): an toàn vì binding đọc ở render-time + type-only import `ReplyTarget` (export từ `CommentItem`).
+> **`text-coral` KHÔNG tồn tại** — coral = `--primary` → dùng `text-primary`.
+> **post.commentsCount = tất cả comments + replies** (backend `_count.comments` không filter parentId). Reply create/delete cũng cập nhật nó.

@@ -26,6 +26,9 @@ export const queryKeys = {
   // Single post (GET /posts/:id).
   post: (id: string) => ['posts', id] as const,
 
-  // A post's comments (GET /posts/:id/comments).
+  // A post's root comments (GET /posts/:id/comments).
   comments: (postId: string) => ['posts', postId, 'comments'] as const,
+
+  // A comment's replies (GET /comments/:id/replies).
+  replies: (commentId: string) => ['comments', commentId, 'replies'] as const,
 };

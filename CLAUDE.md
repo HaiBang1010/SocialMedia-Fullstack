@@ -7,13 +7,13 @@
 
 App name: Beng
 
-Instagram-like social media platform, mục đích học full-stack. Solo dev. Phase 1 xong (backend auth + frontend foundation/auth UI/design system). Phase 2 BACKEND xong (posts/media/follow/like/comment + feed API). Phase 2 FRONTEND: 2.4a/b/c (posts UI) + 2.5 (follow + profile counts + public profile) xong.
+Instagram-like social media platform, mục đích học full-stack. Solo dev. Phase 1 xong (backend auth + frontend foundation/auth UI/design system). Phase 2 xong (BACKEND: posts/media/follow/like/comment + feed API; FRONTEND: 2.4a/b/c posts UI + 2.5 follow/profile/public profile). **Phase 3 xong** (3.1 carousel ≤5 ảnh + 3.2 video upload/playback + delete/visibility/private + 3.3 nested comments/replies). Tiếp theo: Phase 4 (Stories).
 
 ## Cấu trúc
 
 ```
 social-media/
-├── frontend/      ← React + Vite (Phase 1A/1B/1C + Phase 2 FE 2.4/2.5 xong: posts UI + follow + profile)
+├── frontend/      ← React + Vite (Phase 1/2/3 FE xong: posts UI + follow + profile + carousel + video + nested comments)
 ├── backend/       ← Express + Prisma + PostgreSQL
 └── docs (README.md, ARCHITECTURE.md, WORKING_WITH_CLAUDE.md)
 ```
@@ -82,7 +82,10 @@ Mỗi sub-folder có CLAUDE.md riêng — đọc khi làm việc trong folder đ
 | 2. Posts core — BACKEND (posts CRUD, MinIO upload, follow, like, comment phẳng, feed API) | ✅ Xong |
 | 2.4a/b/c (Frontend). Posts UI (data layer, feed, post card, like/comment, composer, profile grid) | ✅ Xong |
 | 2.5 (Frontend). Follow button + profile counts + public profile route `/users/:username` | ✅ Xong |
-| 3-7 | Chưa bắt đầu |
+| 3.1 Posts nâng cao. Multi-image carousel (≤5 ảnh) | ✅ Xong |
+| 3.2 Posts nâng cao. Video upload + playback (+ delete post, change visibility, private toggle) | ✅ Xong |
+| 3.3 Posts nâng cao. Nested comments / replies (split endpoints, flatten 1 cấp, @mention) | ✅ Xong → **Phase 3 hoàn thành** |
+| 4-7 | Chưa bắt đầu |
 
 Khi bạn (Claude) thấy task ngoài phase hiện tại — hỏi user có muốn skip ahead không.
 

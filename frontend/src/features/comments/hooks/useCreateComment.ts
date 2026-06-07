@@ -11,17 +11,30 @@ import {
   snapshotPostCaches,
   type PostCacheSnapshot,
 } from '@/lib/postCache';
+import {
+  appendReply,
+  bumpRepliesCount,
+  replaceReply,
+  restoreCommentCaches,
+  snapshotCommentCaches,
+  type CommentCacheSnapshot,
+} from '@/lib/commentCache';
 import { useAuthStore } from '@/stores/authStore';
 import type { Comment, CommentListResponse } from '@/types/api';
 
-interface CreateCommentContext {
-  prevComments: InfiniteData<CommentListResponse> | undefined;
-  postSnapshot: PostCacheSnapshot;
+interface CreateCommentVars {
+  content: string;
+  parentId?: string; // when set, this is a reply (parentId = root comment id)
 }
 
-// Prepend a comment to the FIRST page (list is newest-first → newest at the top,
-// so the user sees their comment immediately without scrolling).
-// No-op when the list isn't loaded yet — onSuccess invalidate will populate it.
+interface CreateCommentContext {
+  commentSnapshot: CommentCacheSnapshot;
+  postSnapshot: PostCacheSnapshot;
+  tempId: string | null; // optimistic id (null when not authenticated)
+}
+
+// Prepend a comment to the FIRST page of the root list (newest-first → newest on top,
+// so the user sees their comment immediately). No-op when the list isn't loaded yet.
 function prependCommentFirstPage(
   data: InfiniteData<CommentListResponse> | undefined,
   comment: Comment,
@@ -33,55 +46,78 @@ function prependCommentFirstPage(
   return { ...data, pages };
 }
 
-// Post a comment with an optimistic prepend + comment-count bump. On success we
-// invalidate the comment list to pull the real id/order from the server (much
-// safer than hand-reconciling a temp id inside a cursor-paginated list); the
-// count stays at its optimistic +1 since the server incremented it too.
+// Post a comment OR reply with an optimistic insert + count bumps. On success we
+// invalidate the affected list (root comments, or the parent's replies) to pull the
+// real id/order from the server — safer than reconciling a temp id inside a cursor list.
+//   - root comment → prepend to comments(postId), post.commentsCount +1
+//   - reply        → append to replies(parentId), root.repliesCount +1, post.commentsCount +1
+//     (post.commentsCount counts replies too, since the backend _count.comments has no parentId filter)
 export function useCreateComment(postId: string) {
   const qc = useQueryClient();
   const me = useAuthStore((s) => s.user);
 
-  return useMutation<Comment, Error, string, CreateCommentContext>({
-    mutationFn: (content: string) => commentsApi.create(postId, { content }),
+  return useMutation<Comment, Error, CreateCommentVars, CreateCommentContext>({
+    mutationFn: ({ content, parentId }) =>
+      commentsApi.create(postId, { content, parentId }),
 
-    onMutate: async (content) => {
-      await qc.cancelQueries({ queryKey: queryKeys.comments(postId) });
+    onMutate: async ({ content, parentId }) => {
+      const listKey = parentId
+        ? queryKeys.replies(parentId)
+        : queryKeys.comments(postId);
+      await qc.cancelQueries({ queryKey: listKey });
 
-      const key = queryKeys.comments(postId);
-      const prevComments =
-        qc.getQueryData<InfiniteData<CommentListResponse>>(key);
+      const commentSnapshot = snapshotCommentCaches(qc, postId, parentId);
       const postSnapshot = snapshotPostCaches(qc, postId);
 
+      let tempId: string | null = null;
       if (me) {
+        tempId = `temp-${crypto.randomUUID()}`;
         const optimistic: Comment = {
-          id: `temp-${crypto.randomUUID()}`,
+          id: tempId,
           postId,
           authorId: me.id,
-          parentId: null,
+          parentId: parentId ?? null,
           content,
           createdAt: new Date().toISOString(),
           author: me,
+          repliesCount: 0,
         };
-        qc.setQueryData<InfiniteData<CommentListResponse>>(key, (data) =>
-          prependCommentFirstPage(data, optimistic),
-        );
+
+        if (parentId) {
+          appendReply(qc, parentId, optimistic);
+          bumpRepliesCount(qc, postId, parentId, +1);
+        } else {
+          qc.setQueryData<InfiniteData<CommentListResponse>>(
+            queryKeys.comments(postId),
+            (data) => prependCommentFirstPage(data, optimistic),
+          );
+        }
         patchPostInCaches(qc, postId, (p) => ({
           ...p,
           commentsCount: p.commentsCount + 1,
         }));
       }
 
-      return { prevComments, postSnapshot };
+      return { commentSnapshot, postSnapshot, tempId };
     },
 
-    onError: (_err, _content, ctx) => {
+    onError: (_err, _vars, ctx) => {
       if (!ctx) return;
-      qc.setQueryData(queryKeys.comments(postId), ctx.prevComments);
+      restoreCommentCaches(qc, ctx.commentSnapshot);
       restorePostCaches(qc, ctx.postSnapshot);
     },
 
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.comments(postId) });
+    onSuccess: (data, { parentId }, ctx) => {
+      if (parentId) {
+        // Replies are chronological (newest LAST), so invalidating would refetch the
+        // oldest page and drop the just-posted reply on longer threads. Swap the temp
+        // reply in place; only fall back to a refetch if it wasn't in the cache.
+        const swapped = ctx?.tempId ? replaceReply(qc, parentId, ctx.tempId, data) : false;
+        if (!swapped) qc.invalidateQueries({ queryKey: queryKeys.replies(parentId) });
+      } else {
+        // Root list is newest-first, so the new comment lands on the refetched page 0.
+        qc.invalidateQueries({ queryKey: queryKeys.comments(postId) });
+      }
     },
   });
 }

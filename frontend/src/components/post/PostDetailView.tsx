@@ -127,7 +127,7 @@ export default function PostDetailView({ postId }: PostDetailViewProps) {
             {formatRelativeTime(post.createdAt)}
           </div>
           <div className="border-t px-4 py-2">
-            <CommentForm postId={post.id} />
+            <CommentForm postId={post.id} inputId={COMMENT_INPUT_ID} />
           </div>
         </div>
       </div>

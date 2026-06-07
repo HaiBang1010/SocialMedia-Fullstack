@@ -116,7 +116,8 @@ export interface FeedResponse {
 // ── Comments ───────────────────────────────────────────────────────────
 
 // POST /posts/:id/comments, PATCH /comments/:id — returned BARE.
-// parentId is stored but Phase 2 renders comments flat.
+// parentId is null for root comments, the root comment id for replies (Phase 3.3
+// flattens one level). repliesCount is 0 for replies (no nesting beyond level 1).
 export interface Comment {
   id: string;
   postId: string;
@@ -125,9 +126,11 @@ export interface Comment {
   content: string;
   createdAt: string; // ISO
   author: PublicUser;
+  repliesCount: number;
 }
 
-// GET /posts/:id/comments — newest-first, cursor pagination.
+// Shared by GET /posts/:id/comments (root, newest-first) and
+// GET /comments/:id/replies (replies, chronological). Same envelope.
 export interface CommentListResponse {
   comments: Comment[];
   nextCursor: string | null;

@@ -471,10 +471,14 @@ GET    /calls/turn-credentials
 - KHÔNG chronological thuần, KHÔNG AI personalization.
 - Phase polish: nếu cần stable order per session → move shuffle sang server-side (lưu seed vào cursor).
 
-### Comments: recursive data, flat display
-- DB cho phép `parentId` chain vô hạn.
-- Frontend nhận tất cả comments của post, group bằng `parentId`.
-- **Replies (bất kỳ độ sâu)**: hiển thị thụt vào 1 cấp với prefix `@parentAuthor`.
+### Comments: split endpoints + flatten on create (Phase 3.3 — approach a)
+- DB vẫn cho phép `parentId` self-relation, nhưng **flatten 1 cấp lúc create**: nếu reply trỏ tới 1 reply, backend reassign `parentId = parent.parentId` (về root) → chain DB tối đa 1 cấp.
+- **Split endpoints (KHÔNG group client-side toàn bộ — bỏ approach b)**:
+  - `GET /posts/:id/comments` → chỉ **root** (`parentId IS NULL`), newest-first, kèm `repliesCount`.
+  - `GET /comments/:id/replies` → replies của 1 comment, lazy-load, chronological asc.
+  - Lý do bỏ approach (b) "nhận tất cả rồi group": cursor pagination làm reply có thể rơi khác trang với cha → group vỡ.
+- **Reply UI**: thụt 1 cấp; "Reply" trên reply vẫn attach về root nhưng prefix `@<reply_author>`. @mention parse thành Link tới profile.
+- **Delete**: chỉ comment-author (đổi từ author-hoặc-post-author). Cascade xóa replies qua `onDelete: Cascade` (self-relation + post).
 
 ### Stories: time-based filter, soft archive
 - Tạo: `expiresAt = now() + 24h`.
@@ -525,8 +529,8 @@ GET    /calls/turn-credentials
 | 1B Frontend | 1 | Login/Register/Home/Profile UI | ✅ Done |
 | 1C Frontend | 2 | Design system "Beng" + layout shell + dark mode | ✅ Done |
 | 2. Posts core (BE) | 3-5 | Posts CRUD, MinIO upload, follow, like, comment phẳng, feed API | ✅ Backend done |
-| 2. Posts core (FE) | 3-5 | Feed page, post card, create post, profile grid, like/comment/follow UI (shuffle client-side) | ⏳ |
-| 3. Posts nâng cao | 6 | Carousel, video, reply, sticker/gif | ⏳ |
+| 2. Posts core (FE) | 3-5 | Feed page, post card, create post, profile grid, like/comment/follow UI (shuffle client-side) | ✅ Done |
+| 3. Posts nâng cao | 6 | Carousel (3.1) + video (3.2) + nested replies & @mention (3.3); sticker/gif → defer | ✅ Done |
 | 4. Stories | 7-8 | Đăng story, viewer, expire, archive, overlays | ⏳ |
 | 5. Messaging | 9-12 | 1-1, group, reactions, recall, share | ⏳ |
 | 6. Calls | 13-14 | Audio + video call 1-1 | ⏳ |

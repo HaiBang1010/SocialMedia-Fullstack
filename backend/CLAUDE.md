@@ -117,10 +117,11 @@ router.post('/x', validate(xSchema), asyncHandler(async (req, res) => {
 | DELETE | `/posts/:id` | ✓ | xóa post + media S3 (owner) |
 | POST | `/posts/:id/like` | ✓ | like post (idempotent) |
 | DELETE | `/posts/:id/like` | ✓ | unlike post (idempotent) |
-| POST | `/posts/:id/comments` | ✓ | thêm comment |
-| GET | `/posts/:id/comments` | optional | list comment (newest first, cursor) |
+| POST | `/posts/:id/comments` | ✓ | thêm comment hoặc reply (`parentId` optional; reply flatten về root) |
+| GET | `/posts/:id/comments` | optional | list **ROOT** comment (newest first, cursor, default 10) + `repliesCount` mỗi item |
+| GET | `/comments/:id/replies` | optional | list replies của 1 comment (chronological asc, cursor, default 4) |
 | PATCH | `/comments/:id` | ✓ | sửa comment (author) |
-| DELETE | `/comments/:id` | ✓ | xóa comment (author hoặc post owner) |
+| DELETE | `/comments/:id` | ✓ | xóa comment (**chỉ comment author** — đổi từ author-hoặc-post-owner ở 2.3b-1) |
 | POST | `/users/:username/follow` | ✓ | follow user (idempotent) |
 | DELETE | `/users/:username/follow` | ✓ | unfollow user (idempotent) |
 | GET | `/users/:username/followers` | optional | list followers (cursor) |
@@ -135,6 +136,7 @@ Khi thêm endpoint mới, update bảng trên.
 > **Post DTO**: mọi response trả post (single/list/feed) đi qua `serializePost` → kèm `likesCount`, `commentsCount`, `isLikedByMe`, `isFollowingAuthor`.
 > **`optionalAuth`** (middleware/auth.ts): verify token nếu có, KHÔNG 401 nếu thiếu — dùng cho route public cần biết viewer.
 > **Profile DTO** (`GET /users/:username` → `getUserProfile`): trả `publicUserSelect` (7 field, KHÔNG email) + `postsCount/followersCount/followingCount` + `isFollowing`. `isFollowing` = `null` cho anonymous HOẶC self (backend không tự-follow), `true/false` cho viewer logged-in non-self (reuse `isFollowing()` của follows). `postsCount` **mirror grid** = cùng visibility gating với `listPostsByUsername` (private account + non-owner + non-follower → 0; follower → PUBLIC+FOLLOWERS; ngoài → PUBLIC; owner → cả 3). Schema riêng `userProfileSchema` (KHÁC `userPublicSchema` self có email).
+> **Nested comments (Phase 3.3)**: **split endpoints** — `GET /posts/:id/comments` chỉ trả ROOT (`where parentId: null`) + `repliesCount` (`_count.replies`); replies lazy-load qua `GET /comments/:id/replies` (chronological asc). `serializeComment` (mirror `serializePost`) flatten `_count.replies → repliesCount`, KHÔNG leak `_count`. **Flatten-on-create**: `createComment` reassign `parentId = parent.parentId ?? input.parentId` → chain DB tối đa 1 cấp. `deleteComment` **chỉ comment-author** (đổi từ 2.3b-1). Cascade (parent + post `onDelete: Cascade`) đã có từ Phase 2 — **KHÔNG migration**. Routes `/comments/*` tách ra `comments.routes.ts` riêng (mount `/comments` ở server.ts); `GET/POST /posts/:id/comments` ở lại `posts.routes.ts`. Pagination 2 schema riêng (`commentListQuerySchema` default 10 / `replyListQuerySchema` default 4). Response cả 2 endpoint dùng chung `{ comments, nextCursor }`.
 
 ## Khi thêm feature mới
 

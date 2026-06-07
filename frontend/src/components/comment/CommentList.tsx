@@ -1,17 +1,17 @@
-import { useRef } from 'react';
+import { useState } from 'react';
 import { MessageCircle } from 'lucide-react';
 import { useComments } from '@/features/comments/hooks/useComments';
-import { useInfiniteScroll } from '@/hooks/useInfiniteScroll';
 import Spinner from '@/components/common/Spinner';
 import EmptyState from '@/components/common/EmptyState';
 import ErrorState from '@/components/common/ErrorState';
-import CommentItem from './CommentItem';
+import CommentItem, { type ReplyTarget } from './CommentItem';
 
 interface CommentListProps {
   postId: string;
 }
 
-// Newest-first comment list with cursor-based infinite scroll.
+// Root comments (newest-first) with button-based "View more" pagination. Holds the
+// single active reply target so only one inline reply form is open at a time.
 export default function CommentList({ postId }: CommentListProps) {
   const {
     data,
@@ -23,11 +23,7 @@ export default function CommentList({ postId }: CommentListProps) {
     isFetchingNextPage,
   } = useComments(postId);
 
-  const sentinelRef = useRef<HTMLDivElement>(null);
-  useInfiniteScroll(sentinelRef, {
-    onIntersect: fetchNextPage,
-    enabled: Boolean(hasNextPage) && !isFetchingNextPage,
-  });
+  const [replyingTo, setReplyingTo] = useState<ReplyTarget | null>(null);
 
   if (isLoading) {
     return (
@@ -63,13 +59,24 @@ export default function CommentList({ postId }: CommentListProps) {
   return (
     <div className="flex flex-col gap-4">
       {comments.map((comment) => (
-        <CommentItem key={comment.id} comment={comment} />
+        <CommentItem
+          key={comment.id}
+          comment={comment}
+          replyingTo={replyingTo}
+          onReplyClick={setReplyingTo}
+          onCancelReply={() => setReplyingTo(null)}
+        />
       ))}
-      <div ref={sentinelRef} aria-hidden="true" />
-      {isFetchingNextPage && (
-        <div className="flex justify-center py-2">
-          <Spinner className="size-4" />
-        </div>
+
+      {hasNextPage && (
+        <button
+          type="button"
+          onClick={() => fetchNextPage()}
+          disabled={isFetchingNextPage}
+          className="self-start text-sm font-medium text-muted-foreground hover:text-foreground disabled:opacity-50"
+        >
+          {isFetchingNextPage ? 'Loading…' : 'View more comments'}
+        </button>
       )}
     </div>
   );

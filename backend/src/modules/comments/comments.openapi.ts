@@ -5,8 +5,9 @@ import {
   updateCommentSchema,
   commentResponseSchema,
   commentListResponseSchema,
+  commentListQuerySchema,
+  replyListQuerySchema,
 } from './comments.schema';
-import { paginationSchema } from '../posts/posts.schema';
 import { errorResponseSchema, validationErrorResponseSchema } from '../../lib/openapi';
 
 const json = <T extends z.ZodTypeAny>(schema: T) => ({
@@ -44,16 +45,33 @@ export function registerCommentsOpenApi(registry: OpenAPIRegistry) {
     method: 'get',
     path: '/posts/{id}/comments',
     tags: ['Comments'],
-    summary: "List a post's comments (newest first, cursor pagination)",
+    summary: "List a post's ROOT comments (newest first, cursor pagination)",
     description:
-      'Comments are returned newest-first (createdAt desc). Requires the viewer can see the post; ' +
-      'otherwise 404 (existence hidden).',
+      'Returns root comments only (parentId is null), newest-first (createdAt desc), each with ' +
+      'repliesCount. Replies load lazily via GET /comments/{id}/replies. Requires the viewer can ' +
+      'see the post; otherwise 404 (existence hidden).',
     // Optional auth: send a bearer token so FOLLOWERS/owner posts are visible to the right viewer.
     security: [{ bearerAuth: [] }, {}],
-    request: { params: idParam, query: paginationSchema },
+    request: { params: idParam, query: commentListQuerySchema },
     responses: {
-      200: { description: 'Paginated comments', ...json(CommentList) },
+      200: { description: 'Paginated root comments', ...json(CommentList) },
       404: { description: 'Post not found', ...json(errorResponseSchema) },
+    },
+  });
+
+  registry.registerPath({
+    method: 'get',
+    path: '/comments/{id}/replies',
+    tags: ['Comments'],
+    summary: "List a comment's replies (chronological, cursor pagination)",
+    description:
+      'Returns replies of a comment, oldest-first (createdAt asc). Requires the viewer can see the ' +
+      "parent comment's post; otherwise 404 (existence hidden).",
+    security: [{ bearerAuth: [] }, {}],
+    request: { params: idParam, query: replyListQuerySchema },
+    responses: {
+      200: { description: 'Paginated replies', ...json(CommentList) },
+      404: { description: 'Comment not found', ...json(errorResponseSchema) },
     },
   });
 

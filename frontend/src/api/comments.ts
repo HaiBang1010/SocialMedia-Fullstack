@@ -8,13 +8,25 @@ import type {
 } from '@/types/api';
 
 export const commentsApi = {
-  // GET /posts/:id/comments → newest-first, cursor-paginated.
+  // GET /posts/:id/comments → root comments only, newest-first, cursor-paginated.
   list: async (
     postId: string,
     params?: PaginationParams
   ): Promise<CommentListResponse> => {
     const { data } = await apiClient.get<CommentListResponse>(
       `/posts/${postId}/comments`,
+      { params }
+    );
+    return data;
+  },
+
+  // GET /comments/:id/replies → a comment's replies, chronological, cursor-paginated.
+  listReplies: async (
+    commentId: string,
+    params?: PaginationParams
+  ): Promise<CommentListResponse> => {
+    const { data } = await apiClient.get<CommentListResponse>(
+      `/comments/${commentId}/replies`,
       { params }
     );
     return data;

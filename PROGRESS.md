@@ -6,6 +6,34 @@
 
 ---
 
+## 2026-06-07 — Checkpoint 3.3: Nested comments / replies (Phase 3 hoàn thành)
+
+**Done:**
+- **Split endpoints (approach a, IG-style)**: `GET /posts/:id/comments` giờ chỉ trả **ROOT** (`where parentId: null`) + `repliesCount` mỗi item; `GET /comments/:id/replies` (MỚI) lazy-load replies chronological asc. `serializeComment` (mirror `serializePost`) flatten `_count.replies → repliesCount`, KHÔNG leak `_count`. **KHÔNG migration** (parentId/replies + 2 cascade đã có từ Phase 2.3b-1).
+- **Flatten-on-create**: `createComment` reassign `parentId = parent.parentId ?? input.parentId` → reply-của-reply tự về root, chain DB tối đa 1 cấp. **Delete đổi permission**: chỉ comment-author (bỏ post-author của 2.3b-1).
+- **Routes tách**: tạo `comments.routes.ts` riêng (`GET /:id/replies`, `PATCH /:id`, `DELETE /:id`) mount `/comments`; `GET/POST /posts/:id/comments` ở lại `posts.routes.ts`. 2 pagination schema (`commentListQuerySchema` default 10 / `replyListQuerySchema` default 4). Response cả 2 dùng chung `{ comments, nextCursor }`.
+- **Frontend**: `lib/commentCache.ts` (bump repliesCount + append/remove reply + snapshot/restore), `lib/parseMentions.tsx` (@mention → `<Link text-primary>`, lookbehind chặn email), `useReplies`/`useDeleteComment` (mới) + `useCreateComment` refactor (branch root/reply). UI: `RepliesList` (mới, indent + lazy + inline reply form), `CommentItem` refactor (Reply/Delete actions + View/Hide replies toggle + @mention render), `CommentList` lift `replyingTo` + đổi infinite-scroll → "View more comments", `CommentForm` reply mode (prefill + chip + autoFocus tránh id collision), `CommentDeleteConfirmDialog` (chỉ khi root có replies).
+- Verify code-level: backend `tsc -b` 0 lỗi + OpenAPI build OK (20 paths, có `/comments/{id}/replies` + `repliesCount` trong Comment schema); frontend `tsc -b` + `vite build` 0 lỗi (1981 modules).
+
+**Lưu ý kỹ thuật:**
+- **Wire envelope giữ `{ comments, nextCursor }`** cho cả root lẫn replies (reuse `commentListResponseSchema` + `CommentListResponse`) thay vì `{ items }` như spec — zero churn ở root, `useReplies` mirror `useComments` y hệt.
+- **Delete UX 2 nhánh**: reply + root-không-replies → instant optimistic; root CÓ replies → `CommentDeleteConfirmDialog` cảnh báo cascade "deletes N replies" (reuse pattern `DeleteConfirmDialog` của post).
+- **post.commentsCount đếm CẢ replies** (backend `_count.comments` không filter parentId) → reply create/delete cũng bump `commentsCount` qua `patchPostInCaches`; root delete trừ `1 + repliesCount`.
+- **Reply onSuccess swap-in-place (KHÔNG invalidate)**: replies chronological asc → newest ở trang CUỐI; invalidate sẽ refetch trang đầu (oldest) làm reply vừa gửi biến mất ở thread dài. Fix: `replaceReply` thay temp→real tại chỗ, chỉ fallback invalidate nếu temp không có trong cache. Root vẫn invalidate (newest nằm page 0 nên đúng).
+- **`text-coral` không tồn tại** trong theme → @mention dùng `text-primary` (coral = `--primary`).
+- **id collision**: `COMMENT_INPUT_ID` chỉ gắn cho MAIN form (`inputId` prop); reply form dùng `autoFocus` (nhiều form cùng lúc, không trùng id).
+- **Circular import `CommentItem ↔ RepliesList`** an toàn (binding render-time + type-only `ReplyTarget`).
+- **Reply trên 0-reply root**: auto-expand RepliesList rỗng để host form; cancel khi vẫn 0 reply → collapse lại (`handleReplyClose`).
+
+**Tech debt phát sinh (đề xuất BACKLOG, chờ confirm):**
+- `[P3] [frontend/comments]` Optimistic `post.commentsCount −(1+repliesCount)` khi xóa root dựa repliesCount trong cache — có thể lệch nếu replies thêm server-side ngoài session; reconcile khi refetch tự nhiên.
+- `[P3] [frontend/comments]` Edit comment UI chưa làm (backend `updateComment` đã có từ 2.3b-1) — defer.
+- `[P3] [frontend/comments]` @mention chưa autocomplete (gõ @ → dropdown) — Phase polish; notifications mention → Phase 7.
+
+**Next:** Browser-interactive verify 3.3 (root list 10 + "View more"; View/Hide replies 4/page; reply trên root & trên reply prefill đúng; @mention click + `email@gmail.com` không parse; delete reply/root-không-replies instant + root-có-replies confirm cascade; post-author KHÔNG xóa được comment người khác; dark + mobile) + backend curl (root only, replies asc, flatten parentId=root, delete 403 cho non-author & post-author). Sau khi PASS → tag `phase-3-complete` (3.1+3.2+3.3).
+
+---
+
 ## 2026-06-07 — Checkpoint 3.2: Video upload + playback (+ delete post, private toggle, change visibility)
 
 **Done:**

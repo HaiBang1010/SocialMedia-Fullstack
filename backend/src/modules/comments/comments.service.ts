@@ -1,53 +1,79 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/error';
 import { publicUserSelect } from '../users/users.service';
 import { getViewablePost } from '../posts/posts.service';
-import type { CreateCommentInput, UpdateCommentInput } from './comments.schema';
-import type { PaginationInput } from '../posts/posts.schema';
+import type {
+  CreateCommentInput,
+  UpdateCommentInput,
+  CommentListQuery,
+  ReplyListQuery,
+} from './comments.schema';
 
 const commentInclude = {
   author: { select: publicUserSelect },
-} as const;
+  _count: { select: { replies: true } },
+} satisfies Prisma.CommentInclude;
+
+type CommentRow = Prisma.CommentGetPayload<{ include: typeof commentInclude }>;
 
 /**
- * Create a comment on a post. Requires the viewer can see the post (else 404).
- * parentId is stored but the Phase 2 UI renders flat; if given it must belong to the same post.
+ * Flatten the recursive Prisma row into the wire DTO: `_count.replies` becomes a
+ * flat `repliesCount`, Date becomes an ISO string. Mirrors serializePost (posts.service).
+ */
+function serializeComment(comment: CommentRow) {
+  return {
+    id: comment.id,
+    postId: comment.postId,
+    authorId: comment.authorId,
+    parentId: comment.parentId,
+    content: comment.content,
+    createdAt: comment.createdAt.toISOString(),
+    author: comment.author,
+    repliesCount: comment._count.replies,
+  };
+}
+
+/**
+ * Create a comment (or reply) on a post. Requires the viewer can see the post (else 404).
+ * Replies are flattened one level: if the parent is itself a reply, the new comment is
+ * re-parented to the parent's root, so the DB chain never exceeds one level.
  */
 export async function createComment(authorId: string, postId: string, input: CreateCommentInput) {
   await getViewablePost(postId, authorId);
 
+  let parentId: string | null = null;
   if (input.parentId) {
     const parent = await prisma.comment.findUnique({
       where: { id: input.parentId },
-      select: { postId: true },
+      select: { postId: true, parentId: true },
     });
     if (!parent || parent.postId !== postId) {
       throw new AppError(400, 'InvalidParent', 'Parent comment does not belong to this post');
     }
+    // Flatten: attach to the parent's root when the parent is already a reply.
+    parentId = parent.parentId ?? input.parentId;
   }
 
-  return prisma.comment.create({
-    data: {
-      postId,
-      authorId,
-      parentId: input.parentId ?? null,
-      content: input.content,
-    },
+  const comment = await prisma.comment.create({
+    data: { postId, authorId, parentId, content: input.content },
     include: commentInclude,
   });
+  return serializeComment(comment);
 }
 
 /**
- * List a post's comments, newest first (createdAt desc; older comments load on scroll down).
- * Requires the viewer can see the post (else 404). Cursor = comment id of the previous page's last item.
+ * List a post's ROOT comments, newest first (createdAt desc; older comments load on scroll/click).
+ * Each item carries repliesCount. Requires the viewer can see the post (else 404).
+ * Cursor = comment id of the previous page's last item.
  */
-export async function listComments(postId: string, viewerId: string | undefined, pagination: PaginationInput) {
+export async function listComments(postId: string, viewerId: string | undefined, pagination: CommentListQuery) {
   await getViewablePost(postId, viewerId);
 
   const { cursor, limit } = pagination;
 
   const rows = await prisma.comment.findMany({
-    where: { postId },
+    where: { postId, parentId: null },
     include: commentInclude,
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: limit + 1,
@@ -55,10 +81,42 @@ export async function listComments(postId: string, viewerId: string | undefined,
   });
 
   const hasMore = rows.length > limit;
-  const comments = hasMore ? rows.slice(0, limit) : rows;
-  const nextCursor = hasMore ? comments[comments.length - 1]!.id : null;
+  const slice = hasMore ? rows.slice(0, limit) : rows;
+  const nextCursor = hasMore ? slice[slice.length - 1]!.id : null;
 
-  return { comments, nextCursor };
+  return { comments: slice.map(serializeComment), nextCursor };
+}
+
+/**
+ * List a comment's replies, oldest first (chronological — natural thread reading order).
+ * Requires the parent exists and the viewer can see its post (else 404).
+ * Cursor = reply id of the previous page's last item.
+ */
+export async function listReplies(commentId: string, viewerId: string | undefined, pagination: ReplyListQuery) {
+  const parent = await prisma.comment.findUnique({
+    where: { id: commentId },
+    select: { postId: true },
+  });
+  if (!parent) {
+    throw new AppError(404, 'CommentNotFound', 'Comment not found');
+  }
+  await getViewablePost(parent.postId, viewerId);
+
+  const { cursor, limit } = pagination;
+
+  const rows = await prisma.comment.findMany({
+    where: { parentId: commentId },
+    include: commentInclude,
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    take: limit + 1,
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+  });
+
+  const hasMore = rows.length > limit;
+  const slice = hasMore ? rows.slice(0, limit) : rows;
+  const nextCursor = hasMore ? slice[slice.length - 1]!.id : null;
+
+  return { comments: slice.map(serializeComment), nextCursor };
 }
 
 /**
@@ -77,28 +135,29 @@ export async function updateComment(commentId: string, userId: string, input: Up
     throw new AppError(403, 'Forbidden', 'You can only edit your own comments');
   }
 
-  return prisma.comment.update({
+  const updated = await prisma.comment.update({
     where: { id: commentId },
     data: { content: input.content },
     include: commentInclude,
   });
+  return serializeComment(updated);
 }
 
 /**
- * Delete a comment. Allowed for the comment's author OR the post's author (moderation).
- * Cascade (onDelete: Cascade on the self-relation) removes replies.
+ * Delete a comment. Only the comment's author may delete (Phase 3.3 — was author-or-post-author).
+ * Cascade (onDelete: Cascade on the self-relation) removes its replies.
  */
 export async function deleteComment(commentId: string, userId: string): Promise<void> {
   const comment = await prisma.comment.findUnique({
     where: { id: commentId },
-    select: { authorId: true, post: { select: { authorId: true } } },
+    select: { authorId: true },
   });
 
   if (!comment) {
     throw new AppError(404, 'CommentNotFound', 'Comment not found');
   }
-  if (comment.authorId !== userId && comment.post.authorId !== userId) {
-    throw new AppError(403, 'Forbidden', 'You can only delete your own comments or comments on your post');
+  if (comment.authorId !== userId) {
+    throw new AppError(403, 'Forbidden', 'You can only delete your own comments');
   }
 
   await prisma.comment.delete({ where: { id: commentId } });
