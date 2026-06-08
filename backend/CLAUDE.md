@@ -127,6 +127,11 @@ router.post('/x', validate(xSchema), asyncHandler(async (req, res) => {
 | GET | `/users/:username/followers` | optional | list followers (cursor) |
 | GET | `/users/:username/following` | optional | list following (cursor) |
 | GET | `/feed` | ✓ | personalized feed (following users, 14 ngày, cursor) |
+| POST | `/stories` | ✓ | tạo story (1 image hoặc video, expiresAt = now+24h) |
+| GET | `/stories/feed` | ✓ | active stories của following users, grouped by author + `hasUnseenStory` |
+| POST | `/stories/:id/view` | ✓ | mark story viewed (upsert idempotent) → 204 |
+| DELETE | `/stories/:id` | ✓ | xóa story + S3 cleanup (owner) → 204 |
+| GET | `/users/:username/stories` | optional | active stories của 1 user (privacy gate, per-story `isViewedByMe`) |
 
 Khi thêm endpoint mới, update bảng trên.
 
@@ -136,6 +141,8 @@ Khi thêm endpoint mới, update bảng trên.
 > **Post DTO**: mọi response trả post (single/list/feed) đi qua `serializePost` → kèm `likesCount`, `commentsCount`, `isLikedByMe`, `isFollowingAuthor`.
 > **`optionalAuth`** (middleware/auth.ts): verify token nếu có, KHÔNG 401 nếu thiếu — dùng cho route public cần biết viewer.
 > **Profile DTO** (`GET /users/:username` → `getUserProfile`): trả `publicUserSelect` (7 field, KHÔNG email) + `postsCount/followersCount/followingCount` + `isFollowing`. `isFollowing` = `null` cho anonymous HOẶC self (backend không tự-follow), `true/false` cho viewer logged-in non-self (reuse `isFollowing()` của follows). `postsCount` **mirror grid** = cùng visibility gating với `listPostsByUsername` (private account + non-owner + non-follower → 0; follower → PUBLIC+FOLLOWERS; ngoài → PUBLIC; owner → cả 3). Schema riêng `userProfileSchema` (KHÁC `userPublicSchema` self có email).
+> **Stories (Phase 4.1)**: model **`Story`** (1 story = 1 media — field media phẳng trên row: `mediaUrl/mediaObjectKey/mediaType/thumbnailUrl?/thumbnailObjectKey?/duration?/width?/height?`, KHÔNG child-table như PostMedia) + **`StoryView`** (`@@id([storyId, viewerId])` + `viewer User @relation` FULL parity Like, upsert idempotent). User thêm `stories[]` + `storyViews[]`. **KHÔNG cột visibility** — privacy ở user-level (private account + non-follower → empty, KHÔNG 404; user không tồn tại mới 404). **KHÔNG** reference StoryItem/AudioTrack/audioTrackId (defer 4.3/4.4). `expiresAt = now()+24h` set backend lúc create; active filter `expiresAt > now AND isArchived = false` (cron flip isArchived để 4.4). `serializeStory` **whitelist** (KHÔNG leak `mediaObjectKey`/`thumbnailObjectKey` — làm-đúng-từ-đầu, khác serializePost spread raw). `getStoriesFeed` reuse following-set pattern của `feed.service` + 1 query views (Set, tránh N+1) + group-by-author, sort unseen-first. `listStoriesByUsername` privacy mirror `listPostsByUsername`. Video 15s gate ở **frontend** (backend trust client). **Migration `create_stories`** — chạy `npx prisma migrate dev --name create_stories` khi Docker (Postgres) up (lúc code xong Docker daemon down → chỉ `prisma generate` để có type, migration file CHƯA tạo).
+>
 > **Nested comments (Phase 3.3)**: **split endpoints** — `GET /posts/:id/comments` chỉ trả ROOT (`where parentId: null`) + `repliesCount` (`_count.replies`); replies lazy-load qua `GET /comments/:id/replies` (chronological asc). `serializeComment` (mirror `serializePost`) flatten `_count.replies → repliesCount`, KHÔNG leak `_count`. **Flatten-on-create**: `createComment` reassign `parentId = parent.parentId ?? input.parentId` → chain DB tối đa 1 cấp. `deleteComment` **chỉ comment-author** (đổi từ 2.3b-1). Cascade (parent + post `onDelete: Cascade`) đã có từ Phase 2 — **KHÔNG migration**. Routes `/comments/*` tách ra `comments.routes.ts` riêng (mount `/comments` ở server.ts); `GET/POST /posts/:id/comments` ở lại `posts.routes.ts`. Pagination 2 schema riêng (`commentListQuerySchema` default 10 / `replyListQuerySchema` default 4). Response cả 2 endpoint dùng chung `{ comments, nextCursor }`.
 
 ## Khi thêm feature mới

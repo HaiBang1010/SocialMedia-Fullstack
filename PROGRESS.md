@@ -6,6 +6,40 @@
 
 ---
 
+## 2026-06-08 — Checkpoint 4.1: Stories Core (backend + StoryBar data thật + composer slim + viewer)
+
+**Done (migration applied + `tsc` BE+FE + `vite build` 0 lỗi, 1996 modules + backend smoke 26/26):**
+- **Backend schema**: model mới `Story` (1 story = 1 media, field media **phẳng trên row**: mediaUrl/mediaObjectKey/mediaType/thumbnailUrl?/thumbnailObjectKey?/duration?/width?/height?, expiresAt, isArchived, KHÔNG child-table) + `StoryView` (`@@id([storyId, viewerId])` + **`viewer User @relation` FULL** parity Like + `@@index([viewerId])`); `User` thêm `stories[]`+`storyViews[]`. **KHÔNG cột visibility** (privacy user-level), **KHÔNG** StoryItem/AudioTrack/audioTrackId (defer 4.3/4.4). 2 index (`[authorId, expiresAt]`, `[isArchived, expiresAt]`). Migration `20260607181546_create_stories` applied (3 FK đều ON DELETE CASCADE).
+- **Backend module** `modules/stories/` (schema/service/routes/openapi): `POST /stories` (expiresAt=now+24h), `GET /stories/feed` (following-set + 1 query views Set tránh N+1 + group-by-author + sort unseen-first + hasUnseenStory), `GET /users/:username/stories` (privacy mirror listPostsByUsername + per-story isViewedByMe), `POST /stories/:id/view` (upsert idempotent 204), `DELETE /stories/:id` (owner 403 + S3 cleanup media+poster). `serializeStory` **whitelist** (KHÔNG leak objectKey). Wire server.ts `/stories`, users.routes `/:username/stories`, openapi (register + tag) → OpenAPI build **25 paths** (3.3 là 20, +5).
+- **Frontend data layer**: types (`Story`/`StoryFeedItem`/responses/`CreateStoryInput`), queryKeys (`storiesFeed`/`userStories`), `api/stories.ts` (5 method)+barrel, `lib/storyCache.ts` (plain-cache patch: mark viewed/remove/snapshot-restore).
+- **Frontend hooks/stores**: `useStoriesFeed`/`useUserStories`/`useCreateStory`/`useViewStory`/`useDeleteStory` + `storyComposerStore`/`storyViewerStore`.
+- **Frontend components** `components/story/`: `StoryBar` (EXTRACT khỏi FeedPage, wire data + giữ scroll-arrows), `StoryRingItem` (ring coral unseen / muted seen), `StoryViewer` (hand-rolled `fixed inset-0`, body-scroll-lock + ESC, first-unseen start, tap prev/next, timer 5s ảnh / duration video + onEnded, owner Delete, mark seen), `StoryComposer` slim (select→crop|video→upload→done, no caption) + `SelectStoryStage` (croppable img + mp4 ≤15s, GIF/AVIF reject) + `StoryCropStage` (cropImage utils, 9:16 locked). Reuse `composer/VideoStage`. Mount composer+viewer ở AppLayout. FeedPage dùng `<StoryBar/>` component.
+
+**Lưu ý kỹ thuật:**
+- **3 quyết định chốt với user**: (Q1) StoryView `viewer User @relation` FULL ngay; (Q2) composer **build slim mới** KHÔNG reuse PostComposerModal skeleton (chỉ reuse utilities); (Q3) 4.1 cả image + video.
+- **Media phẳng trên Story** (không child-table PostMedia-style) — đơn giản hơn Post, vì 1 story = 1 media.
+- **serializeStory whitelist từ đầu** — KHÔNG lặp tech-debt leak objectKey của serializePost (spread raw media).
+- **Viewer hand-rolled** (không Radix Dialog) để 4.2 gắn gesture; tự lock body scroll + ESC.
+- **Video 15s gate frontend-only** (`SelectStoryStage` sau getVideoMetadata); backend trust client (nhất quán "không verify media").
+- **Ảnh croppable-only** (jpeg/png/webp) vì force 9:16; GIF/AVIF reject ở composer.
+- **storyCache = plain useQuery cache** (`{items}`/`{stories}`), KHÔNG InfiniteData như postCache → patch object trực tiếp.
+- **useCreateStory** mirror useCreatePost nhưng single media (image 1 PUT / video 2 PUT 90-10); onSuccess CHỈ invalidate `userStories(me)` (feed loại self).
+
+**Verify:**
+- **Migration applied** `20260607181546_create_stories` (Story + StoryView + 3 FK cascade + 3 index); `prisma generate` OK. (Docker daemon down lúc code → chỉ generate; apply sau khi user bật Docker.)
+- **Backend smoke 26/26 PASS** (Node script chạy trên dev server + MinIO thật, presign+PUT thật): create image/video, expiresAt+24h, KHÔNG leak objectKey, video-thiếu-thumbnail→400, feed grouped+hasUnseen, follower/non-follower/anonymous, view 204 idempotent + isViewedByMe flip, missing→404, delete non-owner 403 / owner 204, privacy gate đủ 4 nhánh, **MinIO xóa media+video+poster sau delete**. (Script throwaway, đã xóa.)
+- **Browser-interactive CHƯA chạy** (chờ user; dev server BE:3000 + FE:5174 đang chạy): StoryBar data thật, composer crop 9:16 / video 15s reject / GIF-AVIF reject, ring seen/unseen, viewer tap/timer/delete + body-scroll-lock, dark+mobile.
+
+**Tech debt phát sinh (đề xuất BACKLOG, chờ confirm):**
+- `[P3] [backend/stories]` Backend KHÔNG validate video duration (15s) — gate chỉ ở client. Phase polish thêm check server-side (cần đọc metadata / trust client metadata field).
+- `[P3] [frontend/stories]` Viewer chưa có sound unmute toggle (thử play có tiếng, fail → muted) — UX âm thanh đầy đủ để 4.2.
+- `[P2] [frontend/stories]` Viewer auto-advance chỉ trong 1 user (hết → đóng); chuyển sang user kế tiếp + progress-bar animation + gestures → 4.2.
+- `[P3] [backend/stories]` Orphan S3 khi upload partial fail (video PUT ok, poster PUT fail) — carry-over pattern từ posts.
+
+**Next:** Browser-interactive verify (user) → commit `feat: stories core (Checkpoint 4.1)` thẳng main. Sau đó 4.2 (viewer nâng cao: progress-bar animation + gestures hold/swipe + auto-advance qua users).
+
+---
+
 ## 2026-06-07 — Checkpoint 3.3: Nested comments / replies (Phase 3 hoàn thành)
 
 **Done:**

@@ -32,7 +32,7 @@ social-media/
 ├── .claudeignore               ← file Claude Code không đọc
 ├── .gitignore
 │
-├── backend/                    ← Express API (Phase 2 backend ĐÃ XONG)
+├── backend/                    ← Express API (Phase 1–3 backend ĐÃ XONG)
 │   ├── CLAUDE.md
 │   ├── README.md               ← setup chi tiết từng bước
 │   ├── docker-compose.yml
@@ -47,7 +47,7 @@ social-media/
 │       ├── middleware/
 │       └── modules/
 │
-└── frontend/                   ← React app (Phase 2 FE xong — posts UI + follow + profile)
+└── frontend/                   ← React app (Phase 1–3 FE xong — posts UI + follow + profile + carousel + video + nested comments)
     ├── CLAUDE.md
     └── README.md
 ```
@@ -68,7 +68,7 @@ npm run dev                 # → http://localhost:3000
                             # → http://localhost:3000/docs (Swagger UI)
 ```
 
-### Frontend (Phase 2 FE xong)
+### Frontend (Phase 1–3 FE xong)
 
 ```bash
 cd frontend
@@ -89,7 +89,7 @@ npm run dev                 # → http://localhost:5173
 | 1C | Design system "Beng" + layout shell + dark mode | ✅ Xong |
 | 2 (BE) | Posts core backend: posts CRUD, MinIO upload, follow, like, comment phẳng, feed API | ✅ Xong |
 | 2 (FE) | Posts core frontend: feed, post card, create post, profile grid, like/comment, follow button + profile counts, public profile `/users/:username` | ✅ Xong |
-| 3 | Posts nâng cao (carousel, video, reply, sticker) | ⏳ |
+| 3 | Posts nâng cao: carousel ≤5 ảnh (3.1) + video upload/playback + delete/visibility/private (3.2) + nested comments/replies + @mention (3.3) — sticker/gif defer | ✅ Xong |
 | 4 | Stories (24h expire, archive, overlays) | ⏳ |
 | 5 | Messaging (1-1, group, reactions, recall, share post) | ⏳ |
 | 6 | Calls (audio, video, WebRTC) | ⏳ |
@@ -97,7 +97,7 @@ npm run dev                 # → http://localhost:5173
 
 Chi tiết từng phase: xem `ARCHITECTURE.md`. Tiến độ chi tiết: xem `PROGRESS.md`.
 
-## API Endpoints hiện có (Phase 2 backend)
+## API Endpoints hiện có (Phase 1–3 backend)
 
 | Method | Path | Auth | Mô tả |
 |---|---|---|---|
@@ -111,13 +111,14 @@ Chi tiết từng phase: xem `ARCHITECTURE.md`. Tiến độ chi tiết: xem `PR
 | POST · DELETE | `/users/:username/follow` | ✓ | follow / unfollow (idempotent) |
 | GET | `/users/:username/followers` · `/following` | optional | danh sách social (cursor) |
 | POST | `/media/presign` | ✓ | xin presigned URL upload (MinIO) |
-| POST | `/posts` | ✓ | tạo post (ảnh và/hoặc caption) |
+| POST | `/posts` | ✓ | tạo post (≤5 ảnh carousel hoặc 1 video, và/hoặc caption) |
 | GET | `/posts/:id` | optional | xem 1 post (visibility follow-aware) |
 | PATCH · DELETE | `/posts/:id` | ✓ | sửa / xóa post (owner) |
 | POST · DELETE | `/posts/:id/like` | ✓ | like / unlike (idempotent) |
-| POST | `/posts/:id/comments` | ✓ | thêm comment |
-| GET | `/posts/:id/comments` | optional | list comment (cursor) |
-| PATCH · DELETE | `/comments/:id` | ✓ | sửa / xóa comment (author / post owner) |
+| POST | `/posts/:id/comments` | ✓ | thêm comment hoặc reply (`parentId` optional, flatten về root) |
+| GET | `/posts/:id/comments` | optional | list **ROOT** comment + `repliesCount` (cursor) |
+| GET | `/comments/:id/replies` | optional | list replies của 1 comment (chronological, cursor) |
+| PATCH · DELETE | `/comments/:id` | ✓ | sửa / xóa comment (chỉ comment author) |
 | GET | `/feed` | ✓ | feed cá nhân hóa (following, 14 ngày, cursor) |
 
 > Mọi response trả post (single / list / feed) kèm `likesCount`, `commentsCount`, `isLikedByMe`, `isFollowingAuthor`. Chi tiết: `backend/CLAUDE.md` + Swagger `/docs`.

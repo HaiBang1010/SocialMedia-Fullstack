@@ -369,6 +369,12 @@ model Notification {              // Phase 7
 enum NotificationType { LIKE COMMENT FOLLOW MENTION MESSAGE STORY_VIEW }
 ```
 
+> **Phase 4.1 — `Story`/`StoryView` ACTUAL (khác bản plan ở trên):**
+> - `Story` lưu **media phẳng trên row** (`mediaUrl`, `mediaObjectKey`, `mediaType`, `thumbnailUrl?`, `thumbnailObjectKey?`, `duration?`, `width?`, `height?`) — 1 story = 1 media, KHÔNG child-table. Thêm `mediaObjectKey`/`thumbnailObjectKey` cho S3 cleanup (parity PostMedia).
+> - **KHÔNG cột `visibility`** — privacy ở user-level (private account + non-follower → ẩn). **KHÔNG** `audioTrackId`/`audioTrack`/`items` relation — `StoryItem` + `AudioTrack` defer 4.3/4.4, nên Story 4.1 chỉ có `author` + `views`.
+> - `StoryView` thêm **`viewer User @relation`** (FULL FK, KHÁC plan để `viewerId` trơ) + `@@index([viewerId])`; `@@id([storyId, viewerId])` (upsert idempotent). `User` thêm `stories Story[]` + `storyViews StoryView[]`.
+> - `expiresAt = now()+24h` (set backend lúc create). Active = `expiresAt > now AND isArchived = false`. Cron flip `isArchived` → Phase 4.4.
+
 ---
 
 ## 4. API Routes
@@ -395,9 +401,11 @@ POST   /posts/:id/like
 DELETE /posts/:id/like
 
 # Comments (Phase 2-3)
-GET    /posts/:id/comments
-POST   /posts/:id/comments            # optional parentId
-DELETE /comments/:id
+GET    /posts/:id/comments            # Phase 3.3: root only + repliesCount
+POST   /posts/:id/comments            # optional parentId (reply, flatten to root)
+GET    /comments/:id/replies          # Phase 3.3: lazy-load replies (chronological)
+PATCH  /comments/:id                  # edit (comment author)
+DELETE /comments/:id                  # Phase 3.3: comment author only
 
 # Follows (Phase 2)
 POST   /users/:id/follow
@@ -531,7 +539,10 @@ GET    /calls/turn-credentials
 | 2. Posts core (BE) | 3-5 | Posts CRUD, MinIO upload, follow, like, comment phẳng, feed API | ✅ Backend done |
 | 2. Posts core (FE) | 3-5 | Feed page, post card, create post, profile grid, like/comment/follow UI (shuffle client-side) | ✅ Done |
 | 3. Posts nâng cao | 6 | Carousel (3.1) + video (3.2) + nested replies & @mention (3.3); sticker/gif → defer | ✅ Done |
-| 4. Stories | 7-8 | Đăng story, viewer, expire, archive, overlays | ⏳ |
+| 4.1 Stories Core | 7 | BE module (Story/StoryView + 5 endpoints) + StoryBar data thật + composer slim (9:16 / video ≤15s) + viewer cơ bản | 🟡 Code-complete (chờ migration apply + verify) |
+| 4.2 Stories viewer+ | 7 | Progress bars + gestures (hold/swipe) + auto-advance qua users | ⏳ |
+| 4.3 Stories overlays | 8 | StoryItem: mention/sticker/emoji/text (drag/scale/rotate) | ⏳ |
+| 4.4 Stories archive | 8 | isArchived cron + archive page + AudioTrack | ⏳ |
 | 5. Messaging | 9-12 | 1-1, group, reactions, recall, share | ⏳ |
 | 6. Calls | 13-14 | Audio + video call 1-1 | ⏳ |
 | 7. Polish | 15-16 | Notifications, search, hide bài, bảo mật | ⏳ |

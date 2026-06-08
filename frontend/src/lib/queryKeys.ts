@@ -31,4 +31,10 @@ export const queryKeys = {
 
   // A comment's replies (GET /comments/:id/replies).
   replies: (commentId: string) => ['comments', commentId, 'replies'] as const,
+
+  // Stories feed (GET /stories/feed) — active stories grouped by author.
+  storiesFeed: () => ['stories', 'feed'] as const,
+
+  // A user's active stories (GET /users/:username/stories).
+  userStories: (username: string) => ['users', username, 'stories'] as const,
 };

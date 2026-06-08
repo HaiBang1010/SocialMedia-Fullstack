@@ -25,6 +25,8 @@ model User {
   posts        Post[]
   comments     Comment[]
   likes        Like[]
+  stories      Story[]
+  storyViews   StoryView[]
   // Follow relation naming is intentionally "inverted" (matches ARCHITECTURE §3):
   // - followers: rows where I am the `following` target  -> people who follow ME
   // - following: rows where I am the `follower`          -> people I follow
@@ -116,4 +118,43 @@ model Comment {
   replies Comment[] @relation("replies")
 
   @@index([postId, createdAt])
+}
+
+// Phase 4.1 — Stories. One story = ONE media (fields flat on the row, no child table
+// like PostMedia). 24h ephemeral: expiresAt = createdAt + 24h, active = expiresAt > now
+// && !isArchived. No per-story visibility column — privacy is enforced at the user level
+// (a private account hides its stories from non-followers). StoryItem (overlays) and
+// AudioTrack are deferred (Phase 4.3/4.4), so this model does NOT reference them yet.
+model Story {
+  id                 String    @id @default(cuid())
+  authorId           String
+  mediaUrl           String // publicUrl from presign response
+  mediaObjectKey     String // S3 key, used to DeleteObject when the story is deleted/expired
+  mediaType          MediaType
+  thumbnailUrl       String? // video poster URL (frontend-extracted), null for images
+  thumbnailObjectKey String? // S3 key of the poster, deleted alongside the video
+  duration           Int? // video length in seconds, null for images
+  width              Int?
+  height             Int?
+  expiresAt          DateTime // backend sets to createdAt + 24h
+  isArchived         Boolean   @default(false) // flipped by the expiry cron (Phase 4.4)
+  createdAt          DateTime  @default(now())
+
+  author User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  views  StoryView[]
+
+  @@index([authorId, expiresAt]) // active-by-author query
+  @@index([isArchived, expiresAt]) // expiry cron sweep (Phase 4.4)
+}
+
+model StoryView {
+  storyId  String
+  viewerId String
+  viewedAt DateTime @default(now())
+
+  story  Story @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  viewer User  @relation(fields: [viewerId], references: [id], onDelete: Cascade)
+
+  @@id([storyId, viewerId]) // one view row per (story, viewer) — upsert keeps it idempotent
+  @@index([viewerId]) // "have I seen these stories" batch lookup
 }

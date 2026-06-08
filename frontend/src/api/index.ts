@@ -15,3 +15,4 @@ export { feedApi } from './feed';
 export { commentsApi } from './comments';
 export { likesApi } from './likes';
 export { followsApi } from './follows';
+export { storiesApi } from './stories';

@@ -136,6 +136,42 @@ export interface CommentListResponse {
   nextCursor: string | null;
 }
 
+// ── Stories (Phase 4.1) ────────────────────────────────────────────────
+
+// One story = ONE media (flat fields, no media[] like Post). Mirrors backend
+// storyResponseSchema. Returned bare by POST /stories and inside the feed / user
+// lists. isViewedByMe drives the viewer's start index + the ring color.
+export interface Story {
+  id: string;
+  authorId: string;
+  mediaUrl: string;
+  mediaType: MediaType;
+  thumbnailUrl: string | null; // video poster, null for images
+  duration: number | null; // video seconds, null for images
+  width: number | null;
+  height: number | null;
+  createdAt: string; // ISO
+  expiresAt: string; // ISO
+  author: PublicUser;
+  isViewedByMe: boolean;
+}
+
+// GET /stories/feed — active stories of followed users, grouped by author.
+export interface StoryFeedItem {
+  user: PublicUser;
+  stories: Story[];
+  hasUnseenStory: boolean;
+}
+
+export interface StoryFeedResponse {
+  items: StoryFeedItem[];
+}
+
+// GET /users/:username/stories — one user's active stories.
+export interface UserStoriesResponse {
+  stories: Story[];
+}
+
 // ── Likes / Follows ────────────────────────────────────────────────────
 
 // POST/DELETE /posts/:id/like
@@ -203,6 +239,18 @@ export interface CreatePostInput {
 export interface UpdatePostInput {
   caption?: string;
   visibility?: PostVisibility;
+}
+
+// POST /stories — one media item (client already uploaded to S3). No caption in 4.1.
+export interface CreateStoryInput {
+  mediaType?: MediaType; // backend defaults to IMAGE
+  mediaUrl: string;
+  mediaObjectKey: string;
+  thumbnailUrl?: string; // video poster URL
+  thumbnailObjectKey?: string; // poster S3 key, for deleteStory cleanup
+  duration?: number; // video length in seconds
+  width?: number;
+  height?: number;
 }
 
 // POST /posts/:id/comments

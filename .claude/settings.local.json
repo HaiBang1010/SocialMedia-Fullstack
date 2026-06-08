@@ -11,7 +11,10 @@
       "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\('react-query:', \\(p.dependencies||{}\\)['@tanstack/react-query'] || \\(p.devDependencies||{}\\)['@tanstack/react-query']\\)\")",
       "Bash(npm --prefix \"D:/haibang/Social Media/frontend\" run build)",
       "Bash(npm --prefix \"D:/haibang/Social Media/backend\" run build)",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(npx tsx *)",
+      "Bash(curl -s --retry 20 --retry-delay 1 --retry-connrefused http://localhost:3000/health)",
+      "Bash(echo \"EXIT: $?\")"
     ]
   }
 }

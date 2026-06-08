@@ -7,7 +7,7 @@
 
 App name: Beng
 
-Instagram-like social media platform, mục đích học full-stack. Solo dev. Phase 1 xong (backend auth + frontend foundation/auth UI/design system). Phase 2 xong (BACKEND: posts/media/follow/like/comment + feed API; FRONTEND: 2.4a/b/c posts UI + 2.5 follow/profile/public profile). **Phase 3 xong** (3.1 carousel ≤5 ảnh + 3.2 video upload/playback + delete/visibility/private + 3.3 nested comments/replies). Tiếp theo: Phase 4 (Stories).
+Instagram-like social media platform, mục đích học full-stack. Solo dev. Phase 1 xong (backend auth + frontend foundation/auth UI/design system). Phase 2 xong (BACKEND: posts/media/follow/like/comment + feed API; FRONTEND: 2.4a/b/c posts UI + 2.5 follow/profile/public profile). **Phase 3 xong** (3.1 carousel ≤5 ảnh + 3.2 video upload/playback + delete/visibility/private + 3.3 nested comments/replies). **Phase 4 đang làm: 4.1 Stories Core code-complete** (backend stories module + StoryBar data thật + composer slim + viewer cơ bản) — **chờ migration apply (cần Docker) + verify**. Tiếp theo: 4.2 viewer nâng cao, 4.3 overlays, 4.4 archive+cron.
 
 ## Cấu trúc
 
@@ -85,7 +85,11 @@ Mỗi sub-folder có CLAUDE.md riêng — đọc khi làm việc trong folder đ
 | 3.1 Posts nâng cao. Multi-image carousel (≤5 ảnh) | ✅ Xong |
 | 3.2 Posts nâng cao. Video upload + playback (+ delete post, change visibility, private toggle) | ✅ Xong |
 | 3.3 Posts nâng cao. Nested comments / replies (split endpoints, flatten 1 cấp, @mention) | ✅ Xong → **Phase 3 hoàn thành** |
-| 4-7 | Chưa bắt đầu |
+| 4.1 Stories Core (BE module + StoryBar data thật + composer slim + viewer cơ bản) | 🟡 Code-complete (`tsc`+`build` pass) — **chờ migration apply (Docker) + verify** |
+| 4.2 Stories viewer nâng cao (progress bars + gestures + auto-advance qua users) | Chưa bắt đầu |
+| 4.3 Stories overlays (mention/sticker/emoji/text — StoryItem) | Chưa bắt đầu |
+| 4.4 Stories archive + cron (isArchived job + archive page + AudioTrack) | Chưa bắt đầu |
+| 5-7 | Chưa bắt đầu |
 
 Khi bạn (Claude) thấy task ngoài phase hiện tại — hỏi user có muốn skip ahead không.
 

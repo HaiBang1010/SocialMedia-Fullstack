@@ -7,6 +7,7 @@ import * as usersService from './users.service';
 import { paginationSchema } from '../posts/posts.schema';
 import * as postsService from '../posts/posts.service';
 import * as followsService from '../follows/follows.service';
+import * as storiesService from '../stories/stories.service';
 
 const router = Router();
 
@@ -53,6 +54,23 @@ router.get(
       req.params.username,
       req.user?.id,
       req.query as any,
+    );
+    res.json(result);
+  })
+);
+
+/**
+ * GET /users/:username/stories
+ * Active stories of 1 user (oldest-first). optionalAuth → privacy gate (private
+ * account + non-follower → empty) + per-story isViewedByMe for the viewer.
+ */
+router.get(
+  '/:username/stories',
+  optionalAuth,
+  asyncHandler(async (req, res) => {
+    const result = await storiesService.listStoriesByUsername(
+      req.params.username,
+      req.user?.id,
     );
     res.json(result);
   })

@@ -13,6 +13,7 @@ import mediaRoutes from "./modules/media/media.routes";
 import postsRoutes from "./modules/posts/posts.routes";
 import commentsRoutes from "./modules/comments/comments.routes";
 import feedRoutes from "./modules/feed/feed.routes";
+import storiesRoutes from "./modules/stories/stories.routes";
 
 const app = express();
 
@@ -58,6 +59,7 @@ app.use("/media", mediaRoutes);
 app.use("/posts", postsRoutes);
 app.use("/comments", commentsRoutes);
 app.use("/feed", feedRoutes);
+app.use("/stories", storiesRoutes);
 
 // ── ERROR HANDLERS ────────────────────────────
 app.use(notFoundHandler);

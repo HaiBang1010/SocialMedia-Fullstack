@@ -70,6 +70,7 @@ function registerAll() {
   const { registerLikesOpenApi } = require('../modules/likes/likes.openapi');
   const { registerCommentsOpenApi } = require('../modules/comments/comments.openapi');
   const { registerFeedOpenApi } = require('../modules/feed/feed.openapi');
+  const { registerStoriesOpenApi } = require('../modules/stories/stories.openapi');
   const { registerHealthOpenApi } = require('./health.openapi');
   registerAuthOpenApi(registry);
   registerUsersOpenApi(registry);
@@ -79,6 +80,7 @@ function registerAll() {
   registerLikesOpenApi(registry);
   registerCommentsOpenApi(registry);
   registerFeedOpenApi(registry);
+  registerStoriesOpenApi(registry);
   registerHealthOpenApi(registry);
   registered = true;
 }
@@ -103,6 +105,7 @@ export function buildOpenApiDocument() {
       { name: 'Likes' },
       { name: 'Comments' },
       { name: 'Feed', description: 'Personalized feed from following users' },
+      { name: 'Stories', description: 'Ephemeral 24-hour stories' },
       { name: 'Meta' },
     ],
   });

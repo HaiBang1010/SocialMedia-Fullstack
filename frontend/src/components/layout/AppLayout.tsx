@@ -3,6 +3,8 @@ import Sidebar from './Sidebar';
 import RightRail from './RightRail';
 import BottomNav from './BottomNav';
 import PostComposerModal from '@/components/post/PostComposerModal';
+import StoryComposer from '@/components/story/StoryComposer';
+import StoryViewer from '@/components/story/StoryViewer';
 
 export default function AppLayout() {
   return (
@@ -16,6 +18,9 @@ export default function AppLayout() {
       <BottomNav />
       {/* Global post composer — opened from Sidebar / BottomNav / Profile. */}
       <PostComposerModal />
+      {/* Global story composer + viewer — opened from the StoryBar. */}
+      <StoryComposer />
+      <StoryViewer />
     </div>
   );
 }
