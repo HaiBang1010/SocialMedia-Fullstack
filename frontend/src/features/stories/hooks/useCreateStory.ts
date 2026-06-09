@@ -5,7 +5,7 @@ import { queryKeys } from '@/lib/queryKeys';
 import { useAuthStore } from '@/stores/authStore';
 import type { CroppedImage } from '@/lib/cropImage';
 import type { VideoMedia } from '@/lib/video';
-import type { CreateStoryInput, Story } from '@/types/api';
+import type { CreateStoryInput, Story, StoryItemInput } from '@/types/api';
 
 // Which leg of the flow we are on — drives the UploadStage label. Progress %
 // only moves during 'uploading' (the S3 PUT); 'publishing' is the POST /stories.
@@ -14,6 +14,13 @@ export type CreateStoryPhase = 'idle' | 'uploading' | 'publishing';
 // A single prepared media: a cropped 9:16 image (Phase 3.1 utilities) or a video
 // + its poster (Phase 3.2 utilities). Discriminated by contentType.
 export type StoryMediaPayload = CroppedImage | VideoMedia;
+
+// What submit() takes: the media plus any overlay items (Phase 4.3a — image stories only;
+// video has no edit step so items is omitted/empty).
+export interface CreateStoryVars {
+  media: StoryMediaPayload;
+  items?: StoryItemInput[];
+}
 
 function isVideoPayload(m: StoryMediaPayload): m is VideoMedia {
   return m.contentType === 'video/mp4';
@@ -32,8 +39,8 @@ export function useCreateStory() {
   const [progress, setProgress] = useState(0);
   const [phase, setPhase] = useState<CreateStoryPhase>('idle');
 
-  const mutation = useMutation<Story, Error, StoryMediaPayload>({
-    mutationFn: async (media) => {
+  const mutation = useMutation<Story, Error, CreateStoryVars>({
+    mutationFn: async ({ media, items }) => {
       setPhase('uploading');
       setProgress(0);
 
@@ -71,6 +78,7 @@ export function useCreateStory() {
           duration: Math.round(media.duration),
           width: media.width,
           height: media.height,
+          items, // overlays from the edit step (Phase 4.3a — image + video)
         };
       } else {
         // Image: one presign + one PUT. contentType signed here MUST equal the
@@ -88,6 +96,7 @@ export function useCreateStory() {
           mediaObjectKey: presign.objectKey,
           width: media.width,
           height: media.height,
+          items, // Phase 4.3a overlays from the editor (may be [])
         };
       }
 

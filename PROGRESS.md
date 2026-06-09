@@ -6,6 +6,47 @@
 
 ---
 
+## 2026-06-09 — Checkpoint 4.3a: Story overlays builder (TEXT + EMOJI + video edit)
+
+**Done (BE migration + smoke 7/7 + browser verify 42/42 PASS [22 cases gốc + 20 cases extension] + `tsc` BE/FE + `vite build` 0 lỗi, 2009 modules):**
+- **Backend (5 files + migration)**: model `StoryItem` (x/y 0-1 normalized, `scale@1`/`rotation@0`, `payload Json`, FK `onDelete Cascade`, `@@index([storyId])`) + `Story.items[]`. Enum `StoryItemType` khai **đủ 5 value** (TEXT/EMOJI/MENTION/STICKER/TAG, phase-commented) nhưng Zod `storyItemInputSchema` (discriminatedUnion) **gate TEXT+EMOJI** → 4.3b thêm case Zod, **KHÔNG enum migration**. `createStorySchema.items` optional `.default([])` (trước `.refine`, 4.1 zero-break); `storyResponseSchema.items`; `storyInclude.items` (select + `orderBy id asc` — cuid monotonic ⇒ z-order ổn); `serializeStory` whitelist +items; `createStory` nested-create. Migration `20260609095111_add_story_items` (cascade FK). OpenAPI **25 paths** (discriminatedUnion → `oneOf` OK).
+- **Frontend deps**: `@emoji-mart/react`+`@emoji-mart/data`+`emoji-mart` (~50KB — ngoại lệ có chủ đích "no dep mới"; **ship types sẵn**).
+- **Types**: `StoryItemType`/`StoryItem`(discriminated)/`StoryItemInput`(no id); `Story.items`; `CreateStoryInput.items?`.
+- **Overlay primitives**: `StoryOverlay` (reuse editor+viewer), `StoryOverlayLayer` (viewer read-only `pointer-events-none`, null khi rỗng), `useOverlayDrag` (**1 hook**, `getHandlers(item)` tránh hooks-in-loop; CropStage setPointerCapture idiom; normalize px→0-1 theo contentRef; tap<5px=select / ≥5px=drag; trash hit ref final pos <0.12), `TrashZone` (bottom-center, visible khi drag + highlight near), `AddTextOverlay`+`EmojiPickerOverlay` (inline `absolute z-50`, **KHÔNG nested Radix Dialog**; ESC/backdrop cancel).
+- **`StoryEditStage`** (**image + video**): layout **mirror viewer** (max-w-md, h-20 top + h-20 bottom chrome), bg = `media.blob` objectURL → image `<img object-cover>` / video `<video object-contain bg-black>` paused seek 0.1s (no autoplay, match poster), drag-reposition + drag-trash, tap-(de)select, top chrome X(close)/Back/Share.
+- **`StoryComposer`**: step `edit` cho **cả image + video** (`crop→edit→upload` / `video→edit→upload`, cùng StoryEditStage). `editingMedia: StoryMediaPayload`; edit `onBack` conditional (video→`video`/image→`crop`). DialogContent **full-bleed trên edit** (no title bar + bg-black + showClose=false + onEscapeKeyDown preventDefault) → content zone khít viewer.
+- **`StoryViewer`**: restructure flex-col chrome zones + `StoryOverlayLayer`. Gesture/progress/mute/swipe/cross-user **giữ nguyên**.
+- **`useCreateStory`**: mutate var `{media, items?}`; items vào CreateStoryInput **cả image + video path**.
+- **Fix 3 issue + mở rộng video-edit (cùng session, user approve KHÔNG defer)**: (1) **labels** — crop/video stage cuối `Next` (→edit), editor cuối `Share` (→upload+post); (2) **selected ring hug text** — ring chuyển sang inner `inline-block` (shrink content) + `max-w-[80%]` ở outer absolute (giải circular %), TEXT ring sát pill / EMOJI ring-offset-2; (3) **video flow vào edit** — VideoStage→edit (V1 paused first frame, V2 object-contain letterbox), drag overlay trên poster, Share→upload. `vite build` 0 lỗi sau fix.
+- **Docs**: backend/CLAUDE.md (StoryItem + endpoint), frontend/CLAUDE.md (Phase 4.3a section + coord rule + video-edit + ring fix), PROGRESS.md (entry này).
+
+**Verify (code-level + backend functional):**
+- **Migration applied** `20260609095111_add_story_items` (StoryItem + enum 5-value + FK cascade + index storyId); `prisma generate` OK (dev server lúc đó down → KHÔNG EPERM).
+- **Backend smoke 7/7 PASS** (Node fetch trên dev server, backend trust client URL không cần S3): create mix TEXT+EMOJI → 201 + items có id/scale1/rotation0/payload đúng **thứ tự array**; no-items → `[]`; x=1.5 → 400; STICKER → 400 (Zod gate); TEXT thiếu text → 400; delete ×2 → 204 (cascade, không FK error). (Script throwaway, đã xóa.)
+- **`tsc -b` BE + FE + `vite build`** 0 lỗi (2009 modules, +10 so 4.2). OpenAPI build 25 paths + Story.items + StoryItem schema + CreateStoryRequest.items = oneOf.
+- **Browser-interactive 42/42 PASS**: 22 cases bộ gốc (add text/emoji inline, drag, multi-overlay, trash delete + near-highlight, coord consistency editor↔viewer, backward-compat 4.1 no-items, empty→items[], cancel Back/X, ESC AddText, dark+mobile, regression 4.2 gesture/progress/mute/cross-user) + 20 cases extension (3 UX fix: button labels, ring hug text ngắn/dài/multi-line/emoji, video→edit poster bg drag + viewer playback + coord video editor↔viewer mobile+desktop).
+
+**Lưu ý kỹ thuật:**
+- **Pattern 2-layer container (ring sizing fix)**: overlay = outer `absolute` (positioning + drag + transform + `max-w-[80%]` resolve theo content zone) + inner `inline-block` (shrink-wrap content, mang ring). Outer shrink theo inner ⇒ ring hug sát text/pill. Đặt `max-w` ở inner sẽ resolve % sai vs parent shrink-fit (circular) → BẮT BUỘC tách 2 layer.
+- **Video bg = paused first frame at 0.1s + object-contain letterbox** (decision): editor `<video muted preload=metadata>` `onLoadedMetadata`→`currentTime=0.1` (match poster của `extractVideoThumbnail`), **KHÔNG autoplay** (CPU free cho drag overlay). object-contain khớp viewer (cả 2 letterbox ⇒ overlay khớp vị trí; portrait không bị crop).
+- **Coord consistency**: editor+viewer **same layout** (max-w-md + h-20/h-20 chrome + object-fit per media type) ⇒ overlay 0-1 khớp vị trí. Edit full-bleed (no-title-bar, full-screen desktop) để content zone editor == viewer. Mobile exact; desktop cùng max-w-md width.
+- **2 refinement vs E3 pseudocode** (đã chốt khi plan): (1) **symmetric chrome** h-20 cả top+bottom 2 phía (pseudocode lệch auto/h-20) tránh flex-1 khác aspect; (2) **edit full-bleed + bỏ title bar** (Dialog `sm:max-h-[90vh]` + `h-12` title sẽ co/lệch content zone vs viewer).
+- **1 hook useOverlayDrag** (getHandlers per item) — KHÔNG reuse `useStoryGestures` (viewer-nav khác concern).
+- **discriminatedUnion → oneOf** OpenAPI OK (không cần fallback z.union như plan dự phòng).
+- **emoji-mart ship types** (không cần module declaration).
+- **StoryItemType enum full-5** DB + Zod-gate-2 → 4.3b zero enum-migration.
+
+**Tech debt phát sinh (đề xuất BACKLOG, chờ confirm):**
+- `[P2] [frontend/lint]` `npm run lint` vỡ config (eslint 9.39.4 `eslint.config.js:15 recommended undefined`) — **pre-existing**, KHÔNG do 4.3a (install chỉ thêm emoji-mart, không bump eslint). tsc+build là nguồn verify; cần sửa eslint.config riêng.
+- `[P3] [frontend/story-overlay]` z-order = array order (no `order` field) — add `order` nếu 4.3b cần reorder overlay.
+- `[P3] [frontend/story-editor]` Desktop coord lệch nhẹ nếu editor (Dialog full-bleed) vs viewer (fixed inset-0) khác viewport height (cả 2 max-w-md nên width khớp) — exact trên mobile.
+- `[P3] [frontend/bundle]` Bundle 1041KB (>500KB warn) — emoji-mart góp ~50KB; cân nhắc dynamic `import()` Picker.
+- `[P3] [backend/stories]` BE KHÔNG validate ảnh thật chứa overlay (trust client x/y/payload) — nhất quán "không verify media".
+
+**Next:** Commit 4.3a thẳng main (`feat: story overlays builder — text + emoji + video edit (Checkpoint 4.3a)`). Sau đó 4.3b (MENTION/STICKER/TAG + multi-touch scale/rotate).
+
+---
+
 ## 2026-06-09 — Checkpoint 4.2: Story viewer nâng cao (progress bars + gestures + cross-user)
 
 **Done (FRONTEND-ONLY, KHÔNG backend/migration; browser verify 15/15 PASS + `tsc -b` + `vite build` 0 lỗi, 1999 modules):**

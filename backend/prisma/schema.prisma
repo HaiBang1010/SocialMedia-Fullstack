@@ -140,11 +140,39 @@ model Story {
   isArchived         Boolean   @default(false) // flipped by the expiry cron (Phase 4.4)
   createdAt          DateTime  @default(now())
 
-  author User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  author User         @relation(fields: [authorId], references: [id], onDelete: Cascade)
   views  StoryView[]
+  items  StoryItem[] // Phase 4.3 — overlays (text/emoji now, mention/sticker/tag later)
 
   @@index([authorId, expiresAt]) // active-by-author query
   @@index([isArchived, expiresAt]) // expiry cron sweep (Phase 4.4)
+}
+
+// Phase 4.3 — Story overlays. Each item is one draggable layer (text, emoji, …)
+// positioned with x/y normalized 0-1 relative to the story content zone. scale/rotation
+// are stored (default 1/0) but only TEXT + EMOJI with drag are wired in 4.3a; multi-touch
+// scale/rotate + MENTION/STICKER/TAG arrive in 4.3b. payload is a small per-type JSON blob.
+model StoryItem {
+  id       String        @id @default(cuid())
+  storyId  String
+  type     StoryItemType
+  x        Float // 0-1 relative position (content-zone normalized)
+  y        Float
+  scale    Float         @default(1) // 4.3a always 1 (multi-touch scale → 4.3b)
+  rotation Float         @default(0) // 4.3a always 0 (rotate → 4.3b)
+  payload  Json // TEXT: { text }  EMOJI: { emoji }
+
+  story Story @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  @@index([storyId])
+}
+
+enum StoryItemType {
+  TEXT // Phase 4.3a
+  EMOJI // Phase 4.3a
+  MENTION // Phase 4.3b
+  STICKER // Phase 4.3b
+  TAG // Phase 4.3b
 }
 
 model StoryView {

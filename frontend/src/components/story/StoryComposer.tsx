@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { CheckCircle2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { useStoryComposerStore } from '@/stores/storyComposerStore';
 import { useStoryViewerStore } from '@/stores/storyViewerStore';
 import { useAuthStore } from '@/stores/authStore';
@@ -12,15 +13,18 @@ import {
 import type { ImageDimensions } from '@/lib/image';
 import type { CroppedImage } from '@/lib/cropImage';
 import type { VideoMedia } from '@/lib/video';
+import type { StoryItemInput } from '@/types/api';
 import SelectStoryStage from './SelectStoryStage';
 import StoryCropStage from './StoryCropStage';
+import StoryEditStage from './StoryEditStage';
 import VideoStage from '@/components/post/composer/VideoStage';
 
-type Step = 'select' | 'crop' | 'video' | 'upload' | 'done';
+type Step = 'select' | 'crop' | 'edit' | 'video' | 'upload' | 'done';
 
 const STEP_TITLE: Record<Step, string> = {
   select: 'New story',
   crop: 'Crop',
+  edit: 'Edit',
   video: 'Video',
   upload: 'Sharing',
   done: 'Done',
@@ -53,13 +57,18 @@ export default function StoryComposer() {
   const [step, setStep] = useState<Step>('select');
   const [image, setImage] = useState<PickedImage | null>(null);
   const [video, setVideo] = useState<PickedVideo | null>(null);
-  // The prepared payload currently being uploaded — kept so the error screen can retry.
-  const [pending, setPending] = useState<StoryMediaPayload | null>(null);
+  // The prepared media (cropped image OR video) handed to the edit step.
+  const [editingMedia, setEditingMedia] = useState<StoryMediaPayload | null>(null);
+  // The prepared payload + overlays currently being uploaded — kept so the error screen can retry.
+  const [pending, setPending] = useState<{ media: StoryMediaPayload; items: StoryItemInput[] } | null>(
+    null,
+  );
 
   const resetAll = () => {
     setStep('select');
     setImage(null);
     setVideo(null);
+    setEditingMedia(null);
     setPending(null);
     create.reset();
   };
@@ -85,10 +94,10 @@ export default function StoryComposer() {
     setStep('video');
   };
 
-  const submit = (media: StoryMediaPayload) => {
-    setPending(media);
+  const submit = (media: StoryMediaPayload, items: StoryItemInput[] = []) => {
+    setPending({ media, items });
     setStep('upload');
-    create.submit(media);
+    create.submit({ media, items });
   };
 
   const handleViewStory = () => {
@@ -112,9 +121,25 @@ export default function StoryComposer() {
               setImage(null);
               setStep('select');
             }}
-            onComplete={(prepared: CroppedImage) => submit(prepared)}
+            onComplete={(prepared: CroppedImage) => {
+              setEditingMedia(prepared);
+              setStep('edit');
+            }}
           />
         ) : null;
+      case 'edit': {
+        const m = editingMedia;
+        if (!m) return null;
+        const isVideo = m.contentType === 'video/mp4';
+        return (
+          <StoryEditStage
+            media={m}
+            onBack={() => setStep(isVideo ? 'video' : 'crop')}
+            onClose={closeAndReset}
+            onComplete={(items) => submit(m, items)}
+          />
+        );
+      }
       case 'video':
         return video ? (
           <VideoStage
@@ -126,7 +151,10 @@ export default function StoryComposer() {
               setVideo(null);
               setStep('select');
             }}
-            onComplete={(prepared: VideoMedia) => submit(prepared)}
+            onComplete={(prepared: VideoMedia) => {
+              setEditingMedia(prepared);
+              setStep('edit');
+            }}
           />
         ) : null;
       case 'upload':
@@ -185,6 +213,8 @@ export default function StoryComposer() {
     }
   };
 
+  const isEdit = step === 'edit';
+
   return (
     <Dialog
       open={isOpen}
@@ -193,13 +223,35 @@ export default function StoryComposer() {
       }}
     >
       <DialogContent
-        showClose
-        className="flex h-[100dvh] max-h-[100dvh] w-full max-w-none flex-col gap-0 rounded-none p-0 sm:h-auto sm:max-h-[90vh] sm:max-w-lg sm:rounded-xl"
+        showClose={!isEdit}
+        onEscapeKeyDown={(e) => {
+          // On the edit step the inline text/emoji overlays own ESC — don't let Radix close
+          // the whole composer out from under them. (Close via the editor's own X.)
+          if (isEdit) e.preventDefault();
+        }}
+        className={cn(
+          'flex w-full max-w-none flex-col gap-0 rounded-none p-0',
+          isEdit
+            ? // Full-bleed black surface so the editor's content zone matches the viewer exactly.
+              'h-[100dvh] max-h-[100dvh] bg-black'
+            : 'h-[100dvh] max-h-[100dvh] sm:h-auto sm:max-h-[90vh] sm:max-w-lg sm:rounded-xl',
+        )}
       >
-        <div className="flex h-12 shrink-0 items-center justify-center border-b px-12">
-          <DialogTitle className="text-base">{STEP_TITLE[step]}</DialogTitle>
-        </div>
-        <div className="flex-1 overflow-y-auto">{renderStep()}</div>
+        {isEdit ? (
+          <>
+            {/* No title bar on edit (it would shrink/offset the content zone vs the viewer);
+                a hidden title keeps the dialog accessible. */}
+            <DialogTitle className="sr-only">Edit story</DialogTitle>
+            <div className="flex-1 overflow-hidden">{renderStep()}</div>
+          </>
+        ) : (
+          <>
+            <div className="flex h-12 shrink-0 items-center justify-center border-b px-12">
+              <DialogTitle className="text-base">{STEP_TITLE[step]}</DialogTitle>
+            </div>
+            <div className="flex-1 overflow-y-auto">{renderStep()}</div>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );

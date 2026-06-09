@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import Avatar from '@/components/common/Avatar';
 import Spinner from '@/components/common/Spinner';
 import StoryProgressBars from './StoryProgressBars';
+import StoryOverlayLayer from './StoryOverlayLayer';
 import { useStoryViewerStore } from '@/stores/storyViewerStore';
 import { useAuthStore } from '@/stores/authStore';
 import { useStoriesFeed } from '@/features/stories/hooks/useStoriesFeed';
@@ -209,7 +210,7 @@ export default function StoryViewer() {
 
       <div
         className={cn(
-          'relative h-full w-full max-w-md overflow-hidden bg-neutral-900',
+          'relative mx-auto flex h-full w-full max-w-md flex-col bg-black',
           !gestures.isDragging && 'transition-transform duration-200',
         )}
         style={{
@@ -223,74 +224,86 @@ export default function StoryViewer() {
           </div>
         ) : (
           <>
-            {currentStory.mediaType === 'VIDEO' ? (
-              <video
-                key={currentStory.id}
-                ref={videoRef}
-                src={currentStory.mediaUrl}
-                poster={currentStory.thumbnailUrl ?? undefined}
-                muted={muted}
-                playsInline
-                onEnded={goNext}
-                className="absolute inset-0 size-full object-contain"
+            {/* TOP chrome — progress bars + header (h-20, mirrored by the editor so an
+                overlay's normalized position lands on the same image content here). */}
+            <div className="relative z-30 h-20 shrink-0">
+              <StoryProgressBars
+                stories={stories}
+                currentIndex={currentStoryIndex}
+                isPaused={gestures.isPaused}
+                onComplete={goNext}
               />
-            ) : (
-              <img
-                src={currentStory.mediaUrl}
-                alt=""
-                className="absolute inset-0 size-full object-cover"
-              />
-            )}
-
-            <StoryProgressBars
-              stories={stories}
-              currentIndex={currentStoryIndex}
-              isPaused={gestures.isPaused}
-              onComplete={goNext}
-            />
-
-            {/* Header */}
-            <div className="absolute inset-x-3 top-5 z-30 flex items-center gap-2 text-white">
-              <Link
-                to={`/users/${currentStory.author.username}`}
-                onClick={close}
-                className="flex min-w-0 items-center gap-2 transition-opacity hover:opacity-80"
-              >
-                <Avatar user={currentStory.author} size="sm" className="ring-2 ring-white/70" />
-                <span className="text-sm font-medium">{currentStory.author.username}</span>
-              </Link>
-              <span className="text-xs text-white/70">
-                {formatRelativeTime(currentStory.createdAt)}
-              </span>
-              {isOwner && (
-                <button
-                  type="button"
-                  aria-label="Delete story"
-                  onClick={handleDelete}
-                  className="ml-auto grid size-8 place-items-center rounded-full bg-black/30 text-white transition-colors hover:bg-black/55"
+              <div className="absolute inset-x-3 top-8 flex items-center gap-2 text-white">
+                <Link
+                  to={`/users/${currentStory.author.username}`}
+                  onClick={close}
+                  className="flex min-w-0 items-center gap-2 transition-opacity hover:opacity-80"
                 >
-                  <Trash2 className="size-4" />
-                </button>
-              )}
+                  <Avatar user={currentStory.author} size="sm" className="ring-2 ring-white/70" />
+                  <span className="text-sm font-medium">{currentStory.author.username}</span>
+                </Link>
+                <span className="text-xs text-white/70">
+                  {formatRelativeTime(currentStory.createdAt)}
+                </span>
+                {isOwner && (
+                  <button
+                    type="button"
+                    aria-label="Delete story"
+                    onClick={handleDelete}
+                    className="ml-auto grid size-8 place-items-center rounded-full bg-black/30 text-white transition-colors hover:bg-black/55"
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                )}
+              </div>
             </div>
 
-            {/* Mute toggle (video only). */}
-            {currentStory.mediaType === 'VIDEO' && (
-              <button
-                type="button"
-                aria-label={muted ? 'Unmute' : 'Mute'}
-                onClick={() => setMuted((m) => !m)}
-                className="absolute right-3 bottom-3 z-30 grid size-9 place-items-center rounded-full bg-black/40 text-white transition-colors hover:bg-black/60"
-              >
-                {muted ? <VolumeX className="size-5" /> : <Volume2 className="size-5" />}
-              </button>
-            )}
+            {/* CONTENT — media + overlays + gesture layer. */}
+            <div className="relative flex-1 overflow-hidden">
+              {currentStory.mediaType === 'VIDEO' ? (
+                <video
+                  key={currentStory.id}
+                  ref={videoRef}
+                  src={currentStory.mediaUrl}
+                  poster={currentStory.thumbnailUrl ?? undefined}
+                  muted={muted}
+                  playsInline
+                  onEnded={goNext}
+                  className="absolute inset-0 size-full object-contain"
+                />
+              ) : (
+                <img
+                  src={currentStory.mediaUrl}
+                  alt=""
+                  className="absolute inset-0 size-full object-cover"
+                />
+              )}
 
-            {/* Gesture layer: hold-pause / swipe-down / tap-nav. Sits above the
-                media but below the header, mute, and close buttons (higher z,
-                siblings) so tapping those never reaches it. touch-none keeps
-                mobile scroll/pull-refresh from stealing the gesture. */}
-            <div className="absolute inset-0 z-10 touch-none" {...gestures.handlers} />
+              {/* Overlays (read-only). pointer-events-none → taps fall through to gestures.
+                  Empty / absent items render nothing (4.1/4.2 stories). */}
+              <StoryOverlayLayer items={currentStory.items} />
+
+              {/* Mute toggle (video only). */}
+              {currentStory.mediaType === 'VIDEO' && (
+                <button
+                  type="button"
+                  aria-label={muted ? 'Unmute' : 'Mute'}
+                  onClick={() => setMuted((m) => !m)}
+                  className="absolute right-3 bottom-3 z-30 grid size-9 place-items-center rounded-full bg-black/40 text-white transition-colors hover:bg-black/60"
+                >
+                  {muted ? <VolumeX className="size-5" /> : <Volume2 className="size-5" />}
+                </button>
+              )}
+
+              {/* Gesture layer: hold-pause / swipe-down / tap-nav. Above media + overlays
+                  (z-10) but below mute (z-30); the header lives in the separate top-chrome
+                  flex child so its buttons stay reachable. touch-none stops mobile scroll
+                  from stealing the gesture. */}
+              <div className="absolute inset-0 z-10 touch-none" {...gestures.handlers} />
+            </div>
+
+            {/* BOTTOM chrome — reply-input placeholder (h-20, mirrored by the editor). */}
+            <div className="h-20 shrink-0" />
           </>
         )}
       </div>

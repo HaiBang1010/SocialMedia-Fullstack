@@ -136,6 +136,29 @@ export interface CommentListResponse {
   nextCursor: string | null;
 }
 
+// ── Story overlays (Phase 4.3a) ────────────────────────────────────────
+
+// Draggable layers on a story. x/y are 0-1 normalized against the story content zone;
+// scale/rotation are persisted but always 1/0 in 4.3a (multi-touch lands in 4.3b). The
+// backend enum also carries MENTION/STICKER/TAG, but only TEXT + EMOJI render in 4.3a.
+export type StoryItemType = 'TEXT' | 'EMOJI';
+
+interface StoryItemBase {
+  x: number;
+  y: number;
+  scale: number;
+  rotation: number;
+}
+
+export type StoryItem =
+  | (StoryItemBase & { id: string; type: 'TEXT'; payload: { text: string } })
+  | (StoryItemBase & { id: string; type: 'EMOJI'; payload: { emoji: string } });
+
+// Frontend-built overlay before upload — no id (the DB assigns it on create).
+export type StoryItemInput =
+  | (StoryItemBase & { type: 'TEXT'; payload: { text: string } })
+  | (StoryItemBase & { type: 'EMOJI'; payload: { emoji: string } });
+
 // ── Stories (Phase 4.1) ────────────────────────────────────────────────
 
 // One story = ONE media (flat fields, no media[] like Post). Mirrors backend
@@ -154,6 +177,7 @@ export interface Story {
   expiresAt: string; // ISO
   author: PublicUser;
   isViewedByMe: boolean;
+  items: StoryItem[]; // Phase 4.3a overlays ([] for 4.1/4.2 stories)
 }
 
 // GET /stories/feed — active stories of followed users, grouped by author.
@@ -241,7 +265,7 @@ export interface UpdatePostInput {
   visibility?: PostVisibility;
 }
 
-// POST /stories — one media item (client already uploaded to S3). No caption in 4.1.
+// POST /stories — one media item (client already uploaded to S3). No caption.
 export interface CreateStoryInput {
   mediaType?: MediaType; // backend defaults to IMAGE
   mediaUrl: string;
@@ -251,6 +275,7 @@ export interface CreateStoryInput {
   duration?: number; // video length in seconds
   width?: number;
   height?: number;
+  items?: StoryItemInput[]; // Phase 4.3a overlays (image stories only); backend defaults to []
 }
 
 // POST /posts/:id/comments

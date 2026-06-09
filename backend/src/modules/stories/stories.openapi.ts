@@ -3,6 +3,7 @@ import type { OpenAPIRegistry } from '@asteasolutions/zod-to-openapi';
 import {
   createStorySchema,
   storyResponseSchema,
+  storyItemResponseSchema,
   storyFeedResponseSchema,
   userStoriesResponseSchema,
 } from './stories.schema';
@@ -18,6 +19,8 @@ const forbidden403 = { description: 'Forbidden — not the owner', ...json(error
 const notFound404 = { description: 'Story not found', ...json(errorResponseSchema) };
 
 export function registerStoriesOpenApi(registry: OpenAPIRegistry) {
+  // Register StoryItem first so the Story schema $refs it (same schema object reference).
+  registry.register('StoryItem', storyItemResponseSchema);
   const Story = registry.register('Story', storyResponseSchema);
   const StoryFeed = registry.register('StoryFeed', storyFeedResponseSchema);
   const UserStories = registry.register('UserStories', userStoriesResponseSchema);

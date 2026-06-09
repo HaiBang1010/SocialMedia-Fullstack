@@ -16,6 +16,12 @@ const STORY_TTL_MS = 24 * 60 * 60 * 1000;
 // include dùng chung cho mọi response trả 1 story.
 const storyInclude = {
   author: { select: publicUserSelect },
+  // Phase 4.3a overlays. select (not raw) so we never leak storyId; render/z-order = the
+  // returned array order (insertion order). orderBy id for a stable, deterministic sequence.
+  items: {
+    select: { id: true, type: true, x: true, y: true, scale: true, rotation: true, payload: true },
+    orderBy: { id: 'asc' },
+  },
 } satisfies Prisma.StoryInclude;
 
 type StoryRow = Prisma.StoryGetPayload<{ include: typeof storyInclude }>;
@@ -38,6 +44,15 @@ function serializeStory(story: StoryRow, options: { isViewedByMe: boolean }) {
     createdAt: story.createdAt.toISOString(),
     expiresAt: story.expiresAt.toISOString(),
     author: story.author,
+    items: story.items.map((i) => ({
+      id: i.id,
+      type: i.type,
+      x: i.x,
+      y: i.y,
+      scale: i.scale,
+      rotation: i.rotation,
+      payload: i.payload,
+    })),
     isViewedByMe: options.isViewedByMe,
   };
 }
@@ -68,6 +83,20 @@ export async function createStory(authorId: string, input: CreateStoryInput) {
       width: input.width ?? null,
       height: input.height ?? null,
       expiresAt: new Date(Date.now() + STORY_TTL_MS),
+      // Phase 4.3a overlays. Nested-create preserves array order (cuid counter is monotonic
+      // per process → matches storyInclude's orderBy id), so z-order survives the round-trip.
+      items: input.items.length
+        ? {
+            create: input.items.map((i) => ({
+              type: i.type,
+              x: i.x,
+              y: i.y,
+              scale: i.scale,
+              rotation: i.rotation,
+              payload: i.payload,
+            })),
+          }
+        : undefined,
     },
     include: storyInclude,
   });

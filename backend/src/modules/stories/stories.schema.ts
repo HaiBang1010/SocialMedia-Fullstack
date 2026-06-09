@@ -1,5 +1,46 @@
 import { z } from 'zod';
-import { MediaType } from '@prisma/client';
+import { MediaType, StoryItemType } from '@prisma/client';
+
+// ── Story overlay items (Phase 4.3a: TEXT + EMOJI) ──────────────────────
+// One draggable overlay layer. x/y are 0-1 normalized against the story content zone;
+// scale/rotation are stored (defaults 1/0) but not user-editable until 4.3b. payload is
+// a small per-type JSON blob. The Postgres enum already carries MENTION/STICKER/TAG, but
+// the input below GATES to TEXT + EMOJI — 4.3b just adds discriminated cases, no migration.
+const overlayBaseShape = {
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+  scale: z.number().positive().default(1),
+  rotation: z.number().default(0),
+};
+
+const textItemInputSchema = z.object({
+  type: z.literal('TEXT'),
+  ...overlayBaseShape,
+  payload: z.object({ text: z.string().min(1).max(200) }),
+});
+
+const emojiItemInputSchema = z.object({
+  type: z.literal('EMOJI'),
+  ...overlayBaseShape,
+  payload: z.object({ emoji: z.string().min(1).max(8) }),
+});
+
+export const storyItemInputSchema = z.discriminatedUnion('type', [
+  textItemInputSchema,
+  emojiItemInputSchema,
+]);
+
+// Response shape for one persisted overlay (adds the DB-assigned id). payload kept loose
+// here (doc only) — the runtime serializer whitelists the real per-type shape.
+export const storyItemResponseSchema = z.object({
+  id: z.string(),
+  type: z.nativeEnum(StoryItemType),
+  x: z.number(),
+  y: z.number(),
+  scale: z.number(),
+  rotation: z.number(),
+  payload: z.record(z.string(), z.unknown()),
+});
 
 /**
  * Body for POST /stories. One story = ONE media item (image or video) — fields are
@@ -20,6 +61,9 @@ export const createStorySchema = z
     duration: z.number().int().positive().optional(), // video length in seconds
     width: z.number().int().positive().optional(),
     height: z.number().int().positive().optional(),
+    // Phase 4.3a — overlays (text/emoji). Optional + default [] keeps 4.1 clients working.
+    // No hard cap here (a soft >20 warning lives in the editor UX).
+    items: z.array(storyItemInputSchema).default([]),
   })
   // A video story must carry a poster so the ring/preview has something to show.
   .refine(
@@ -53,6 +97,7 @@ export const storyResponseSchema = z.object({
   expiresAt: z.string(), // ISO
   author: storyAuthorSchema,
   isViewedByMe: z.boolean(),
+  items: z.array(storyItemResponseSchema), // Phase 4.3a overlays ([] for 4.1/4.2 stories)
 });
 
 // GET /stories/feed — active stories of followed users, grouped by author.

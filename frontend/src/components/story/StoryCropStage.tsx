@@ -179,7 +179,7 @@ export default function StoryCropStage({
           Back
         </Button>
         <Button onClick={handleComplete} disabled={busy || !base}>
-          Share to story
+          Next
         </Button>
       </div>
     </div>
