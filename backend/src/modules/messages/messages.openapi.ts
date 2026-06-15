@@ -46,7 +46,7 @@ export function registerMessagesOpenApi(registry: OpenAPIRegistry) {
     method: 'post',
     path: '/conversations/{id}/messages',
     tags: ['Messages'],
-    summary: 'Send a text message (participant only)',
+    summary: 'Send a message — text and/or image/video media (participant only)',
     security: [{ bearerAuth: [] }],
     request: { params: idParam, body: json(SendMessageReq) },
     responses: {

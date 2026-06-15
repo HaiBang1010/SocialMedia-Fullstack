@@ -312,14 +312,20 @@ model Message {                   // Phase 5
 
 enum MessageContentType { TEXT IMAGE VIDEO EMOJI STICKER GIF POST_SHARE VOICE }
 
-model MessageMedia {              // Phase 5
-  id           String   @id @default(cuid())
-  messageId    String
-  type         MediaType
-  url          String
-  thumbnailUrl String?
-  duration     Int?
-  message      Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+model MessageMedia {              // Phase 5.4a (Rich — mirrors PostMedia/Story media fields)
+  id                 String   @id @default(cuid())
+  messageId          String
+  type               MediaType // IMAGE | VIDEO (mix allowed within one message)
+  order              Int      @default(0) // 0-indexed carousel order
+  url                String
+  objectKey          String   // S3 cleanup key (recall, Phase 5.5)
+  thumbnailUrl       String?  // image thumbnail / video poster (frontend-generated)
+  thumbnailObjectKey String?  // S3 cleanup key for the thumbnail
+  width              Int?     // original dims → grid aspect / no CLS
+  height             Int?
+  duration           Int?     // seconds, video only
+  message            Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  @@unique([messageId, order])
 }
 
 model MessageReaction {           // Phase 5

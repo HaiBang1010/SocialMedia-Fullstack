@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, MessageContentType } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/error';
 import { publicUserSelect } from '../users/users.service';
@@ -7,10 +7,12 @@ import type { SendMessageInput } from './messages.schema';
 import type { PaginationInput } from '../posts/posts.schema';
 
 // include dùng chung cho mọi response trả 1 message. reactions ordered oldest-first so the
-// client's groupReactionsByEmoji keeps a stable first-seen emoji order (Phase 5.3a).
+// client's groupReactionsByEmoji keeps a stable first-seen emoji order (Phase 5.3a). media
+// ordered by `order` asc so the carousel/grid renders in the sender's chosen sequence (5.4a).
 const messageInclude = {
   sender: { select: publicUserSelect },
   reactions: { orderBy: { createdAt: 'asc' } },
+  media: { orderBy: { order: 'asc' } },
 } satisfies Prisma.MessageInclude;
 
 export type MessageRow = Prisma.MessageGetPayload<{ include: typeof messageInclude }>;
@@ -31,6 +33,18 @@ export function serializeMessage(message: MessageRow) {
     sender: message.sender,
     // Phase 5.3a — RAW reaction rows (D2); the client aggregates into "👍 3  ❤️ 1".
     reactions: message.reactions.map((r) => ({ userId: r.userId, emoji: r.emoji })),
+    // Phase 5.4a — image/video attachments (ordered). WHITELIST: objectKey/thumbnailObjectKey
+    // (S3 cleanup keys) are server-only and never serialized — mirrors serializeStory.
+    media: message.media.map((m) => ({
+      id: m.id,
+      type: m.type,
+      order: m.order,
+      url: m.url,
+      thumbnailUrl: m.thumbnailUrl,
+      width: m.width,
+      height: m.height,
+      duration: m.duration,
+    })),
   };
 }
 
@@ -76,12 +90,16 @@ export async function listMessages(
 }
 
 /**
- * Send a TEXT message. WRITE: a non-participant gets 403 (the act of writing proves they
- * know the conversation exists — mirrors updatePost non-owner → 403). Bumps the
- * conversation's lastMessageAt (drives list ordering) and marks the sender as having read
- * their own message. Three sequential writes — no transaction (the codebase's style).
+ * Send a message — text, image/video media (1..10, mix allowed), or both (Phase 5.4a; 5.1 was
+ * TEXT-only). WRITE: a non-participant gets 403 (the act of writing proves they know the
+ * conversation exists — mirrors updatePost non-owner → 403). contentType is DERIVED here, not
+ * sent by the client: no media → TEXT; all-video → VIDEO; otherwise IMAGE (the "has media"
+ * marker — the client renders each item by its own media.type, so a mixed carousel works).
+ * Media rows are nested-created in the same write. Then bumps the conversation's lastMessageAt
+ * (drives list ordering) and marks the sender as having read their own message — sequential
+ * writes, no transaction (the codebase's style).
  */
-export async function sendTextMessage(
+export async function sendMessage(
   conversationId: string,
   senderId: string,
   input: SendMessageInput,
@@ -90,12 +108,38 @@ export async function sendTextMessage(
     throw new AppError(403, 'Forbidden', 'You are not a participant of this conversation');
   }
 
+  const media = input.media ?? [];
+  const caption = input.content && input.content.length > 0 ? input.content : null;
+  const contentType: MessageContentType =
+    media.length === 0
+      ? MessageContentType.TEXT
+      : media.every((m) => m.type === 'VIDEO')
+        ? MessageContentType.VIDEO
+        : MessageContentType.IMAGE;
+
   const message = await prisma.message.create({
     data: {
       conversationId,
       senderId,
-      contentType: 'TEXT',
-      content: input.content,
+      contentType,
+      content: caption,
+      ...(media.length
+        ? {
+            media: {
+              create: media.map((m) => ({
+                type: m.type,
+                order: m.order,
+                url: m.url,
+                objectKey: m.objectKey,
+                thumbnailUrl: m.thumbnailUrl,
+                thumbnailObjectKey: m.thumbnailObjectKey,
+                width: m.width ?? null,
+                height: m.height ?? null,
+                duration: m.duration ?? null,
+              })),
+            },
+          }
+        : {}),
     },
     include: messageInclude,
   });

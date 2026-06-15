@@ -6,6 +6,31 @@
 
 ---
 
+## 2026-06-13 — Checkpoint 5.4a: Media Messages (Image + Video)
+
+**Done (BE migration `add_message_media` applied + `prisma generate` + `tsc` 0 lỗi + media smoke 14/14 PASS trên server live + OpenAPI 33 paths giữ nguyên; FE `tsc -b` + `vite build` 0 lỗi 2086 modules [+9]). Browser-verify CHƯA chạy.** 1 message mang text caption AND/OR 1–10 media (ảnh + video **trộn được**); client resize thumbnail + upload gốc qua presign; grid IG-style trong bubble + lightbox fullscreen swipe; optimistic per-item progress + retry-resume. 4 decision FINAL: D1 IG-adaptive grid · D2 allow-mix (contentType marker) · D3 parallel pool-3 · D4 Rich model.
+
+- **Backend (~5 file + 1 migration)**: model **`MessageMedia`** (Rich: `type MediaType`/`order`/`url`/`objectKey`/`thumbnailUrl?`/`thumbnailObjectKey?`/`width?`/`height?`/`duration?`, `@@unique([messageId,order])`, FK `onDelete: Cascade`; `Message.media`). `messages.schema`: bỏ `z.literal('TEXT')` → `sendMessageSchema {content?, media[]≤10}` + superRefine (≥1 content/media + VIDEO requires duration); `messageMediaInputSchema` (plain object → OpenAPI sạch); `messageMediaResponseSchema` (whitelist, KHÔNG objectKey). `messages.service`: `sendTextMessage`→**`sendMessage`** derive contentType (no media→TEXT / all-video→VIDEO / else IMAGE marker) + nested media create; `messageInclude.media` orderBy order asc; `serializeMessage` whitelist media. `conversations.service`: `conversationInclude.messages.media` (type parity 5.3a lesson). Route call-site đổi `sendMessage`. **Presign reuse y nguyên** (generic `/media/presign`, KHÔNG đụng media module). OpenAPI 33 paths (chỉ body schema đổi).
+- **Frontend (~13 file)**: `types/api.ts` (`MessageMedia` [+client-only `localUrl`/`uploadProgress`/`uploadStatus`], `Message.media`, `MessageMediaInput`, `SendMessageInput {content?, media?}`). `lib/imageResize.ts` NEW (Canvas thumbnail ≤512px JPEG q0.72, fallback original khi decode fail), `lib/uploadPool.ts` NEW (pool cap-3 ordered), `lib/messagePreview.ts` NEW (📷/🎥/📎 list preview), `messageCache.patchMessageMediaProgress`. `features/messaging/mediaUpload.ts` NEW (`prepareAttachment` probe+thumbnail+previewUrl, `uploadAttachments` pool-3 presign+2-PUT per item + resume, pending-stash Map keyed temp-id). `useSendMessage` rewrite (vars `{tempId, content?, isRetry?}`; optimistic media localUrl+status; upload→patch progress→POST→swap+revoke; retry resume). Components: `MessageMediaGrid` (IG 1/2/3/4/5+ +N overlay), `MediaCell` (type-aware + progress/failed overlay), `MediaLightbox` (hand-rolled fixed overlay, ESC/swipe/arrows, mount AppLayout), `mediaLightboxStore`. `MessageBubble` render grid above caption + open lightbox. `MessageInput` rewrite (attach button + preview strip + validate ≤10/size/MIME + prepare→send). `MessageThread.onRetry` + `ConversationListItem` preview.
+
+**Lưu ý kỹ thuật:**
+- **contentType derived server-side** (D2 mix): client KHÔNG gửi contentType; server tính (mix→IMAGE marker), client render per `media[].type` ⇒ carousel lẫn ảnh+video chạy.
+- **Presign-first ⇒ generic key** (`media/user_<id>/<ts>_<rand>`): bỏ ý tưởng `messages/{messageId}/…` (messageId chưa tồn tại lúc upload). Trust client URL (precedent createStory), KHÔNG verify S3.
+- **Type parity (lại bài 5.3a)**: `media` vào `messageInclude` ⇒ BẮT BUỘC `conversationInclude.messages.media`.
+- **Optimistic media + pending stash**: File/Blob KHÔNG serialize được vào query cache ⇒ stash `PreparedAttachment[]` ở Map module keyed temp-id; cache giữ localUrl (objectURL) + progress/status; revoke khi swap success.
+- **Retry resume**: item upload xong set `a.uploaded` ⇒ retry chỉ re-upload item chưa xong (giữ URL item done), KHÔNG partial-send (POST chỉ khi đủ N media).
+- **2 uploads/ảnh** (Q6): gốc untouched (lightbox) + thumbnail JPEG (grid). Video poster reuse `lib/video.ts extractVideoThumbnail`.
+- **Lightbox open-gate**: optimistic cell (có `uploadStatus`) KHÔNG mở lightbox (chỉ local urls); mở khi message thật (status cleared sau swap).
+
+**Tech debt phát sinh (đề xuất BACKLOG):**
+1. [backend/messages] Orphan S3 media: upload xong nhưng POST message fail/user bỏ → object mồ côi (khớp debt Posts/Stories). Defer Phase polish (cron sweep). MessageMedia đã lưu objectKey ⇒ recall 5.5 cleanup được.
+2. [frontend/messaging] Drag-drop + paste-clipboard + reorder-before-send + edit-caption-after-send + pinch-zoom lightbox: defer Phase polish (ngoài scope 5.4a).
+3. [frontend/messaging] Thumbnail 512px: nếu single-image trông mềm trên màn lớn có thể nâng ceiling.
+
+**Next:** Browser-verify 5.4a (attach 1/5/10, mix ảnh+video, caption, grid 1/2/3/4/5+, lightbox swipe/ESC, video player, progress, fail+retry, dark+mobile) — 2 incognito cho realtime `message:new` mang media. Rồi commit. Tiếp: 5.4b (voice) / 5.4c (sticker-GIF-picker / post-share) / 5.5 (recall + group UI).
+
+---
+
 ## 2026-06-13 — Checkpoint 5.3b + 5.3c: GROUP read receipts UI + GROUP composite avatar (+ 5.3a popover fix)
 
 **Done (BE `tsc` 0 lỗi + group-validation smoke 5/5 trên server live; FE `tsc -b` + `vite build` 0 lỗi 2077 modules; uncommitted trên commit `2517993`). Browser-verify CHƯA chạy.**

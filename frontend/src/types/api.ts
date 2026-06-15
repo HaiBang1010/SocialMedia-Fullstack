@@ -245,8 +245,26 @@ export interface MessageReaction {
   emoji: string;
 }
 
+// One image/video attachment on a message (Phase 5.4a). Server WHITELIST — objectKey is never
+// exposed. width/height are the ORIGINAL dimensions (drive the IG-style grid aspect / avoid CLS).
+// The optional fields below are CLIENT-ONLY (never sent by the server): they live on an optimistic
+// message's media while it uploads, driving the per-cell preview + progress / failed overlay.
+export interface MessageMedia {
+  id: string;
+  type: MediaType;
+  order: number;
+  url: string;
+  thumbnailUrl: string | null;
+  width: number | null;
+  height: number | null;
+  duration: number | null; // seconds, video only
+  localUrl?: string; // object URL for instant optimistic preview
+  uploadProgress?: number; // 0–100 during upload
+  uploadStatus?: 'uploading' | 'done' | 'failed';
+}
+
 // One message. Returned BARE by POST /conversations/:id/messages and inside the
-// messages list. content is null only for deleted/recalled messages (Phase 5.5).
+// messages list. content is null for media-only messages and deleted/recalled ones (5.5).
 export interface Message {
   id: string;
   conversationId: string;
@@ -256,6 +274,7 @@ export interface Message {
   createdAt: string; // ISO
   sender: PublicUser;
   reactions: MessageReaction[]; // Phase 5.3a — RAW rows; aggregated client-side for display
+  media: MessageMedia[]; // Phase 5.4a — image/video attachments (ordered; [] for text)
   // Client-only (Phase 5.2 T7): set on an optimistic message whose send failed, so the bubble
   // can show a "Failed — tap to retry" affordance. Never sent by the server.
   failed?: boolean;
@@ -422,10 +441,26 @@ export interface UpdateCommentInput {
   content: string;
 }
 
-// POST /conversations/:id/messages — Phase 5.1 is TEXT-only.
+// One media attachment in a send-message body (Phase 5.4a). The client uploads the original +
+// a thumbnail/poster to MinIO FIRST, then sends these references. objectKey/thumbnailObjectKey
+// are persisted server-side for S3 cleanup on recall (5.5); thumbnailUrl required for BOTH types.
+export interface MessageMediaInput {
+  type: MediaType;
+  order: number;
+  url: string;
+  objectKey: string;
+  thumbnailUrl: string;
+  thumbnailObjectKey: string;
+  width?: number;
+  height?: number;
+  duration?: number; // required for VIDEO (enforced server-side)
+}
+
+// POST /conversations/:id/messages (Phase 5.4a). A message carries an optional text caption
+// AND/OR 1..10 media items (images + videos may be mixed). The server derives contentType.
 export interface SendMessageInput {
-  contentType: 'TEXT';
-  content: string;
+  content?: string;
+  media?: MessageMediaInput[];
 }
 
 // POST /conversations/direct

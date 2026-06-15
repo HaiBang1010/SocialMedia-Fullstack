@@ -254,8 +254,32 @@ model Message {
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender       User         @relation(fields: [senderId], references: [id])
   reactions    MessageReaction[]
+  media        MessageMedia[] // Phase 5.4a — image/video attachments (1..10, ordered)
 
   @@index([conversationId, createdAt]) // message-list cursor (newest-first)
+}
+
+// Phase 5.4a — image/video attachments of a message (1..10 per message, mix allowed). One
+// row = one media item. Mirrors PostMedia/Story media fields: objectKey + thumbnailObjectKey
+// are kept so the S3 objects can be cleaned up on recall (Phase 5.5); width/height drive the
+// IG-style grid layout (avoid CLS); order is the 0-indexed carousel position. The message's
+// contentType is derived server-side (mix → IMAGE marker); render is per-item via `type`.
+model MessageMedia {
+  id                 String    @id @default(cuid())
+  messageId          String
+  type               MediaType // reuse the existing IMAGE/VIDEO enum
+  order              Int       @default(0) // 0-indexed carousel order
+  url                String // publicUrl from presign response (original)
+  objectKey          String // S3 key of the original, used to DeleteObject on recall
+  thumbnailUrl       String? // image thumbnail / video poster (frontend-generated)
+  thumbnailObjectKey String? // S3 key of the thumbnail, deleted alongside the media
+  width              Int?
+  height             Int?
+  duration           Int? // video length in seconds, null for images
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, order]) // one media per (message, order); leftmost-messageId indexes the lookup
 }
 
 // Phase 5.3a — one emoji reaction per (message, user). Composite PK enforces "1 reaction per

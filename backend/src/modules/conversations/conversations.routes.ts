@@ -69,14 +69,15 @@ router.get(
 );
 
 /**
- * POST /conversations/:id/messages — send a TEXT message (participant only; 403 else).
+ * POST /conversations/:id/messages — send a message: text, image/video media (1..10, mix
+ * allowed), or both (Phase 5.4a). Participant only; 403 else.
  */
 router.post(
   '/:id/messages',
   requireAuth,
   validate(sendMessageSchema),
   asyncHandler(async (req, res) => {
-    const message = await messagesService.sendTextMessage(req.params.id, req.user!.id, req.body);
+    const message = await messagesService.sendMessage(req.params.id, req.user!.id, req.body);
     res.status(201).json(message);
   }),
 );

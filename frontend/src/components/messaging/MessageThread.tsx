@@ -54,10 +54,11 @@ export default function MessageThread({
     : [];
   const typingActive = typingNames.length > 0;
 
-  // Retry a failed send (T7): reuse the failed message's temp id so it swaps in place.
+  // Retry a failed send (T7): reuse the failed message's temp id so it swaps in place. Works for
+  // text and media (media resumes from the stashed attachments — only unfinished items re-upload).
   const onRetry = useCallback(
     (m: Message) => {
-      if (m.content) send({ content: m.content, retryTempId: m.id });
+      send({ tempId: m.id, content: m.content ?? undefined, isRetry: true });
     },
     [send],
   );

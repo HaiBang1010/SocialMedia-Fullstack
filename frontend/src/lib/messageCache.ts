@@ -149,6 +149,41 @@ export function patchMessageReactions(
   );
 }
 
+// Phase 5.4a — update one optimistic media item's upload progress/status on a temp message.
+// Funnels every per-item upload tick (and the final done/failed) through here. Same-reference-
+// when-unchanged so observers aren't notified needlessly. Matches the media item by its `order`.
+// No-op if the temp message isn't in cache.
+export function patchMessageMediaProgress(
+  qc: QueryClient,
+  conversationId: string,
+  tempId: string,
+  order: number,
+  progress: number,
+  status: 'uploading' | 'done' | 'failed',
+): void {
+  qc.setQueryData<InfiniteData<MessagesListResponse>>(
+    queryKeys.messages(conversationId),
+    (data) => {
+      if (!data) return data;
+      let touched = false;
+      const pages = data.pages.map((page) => {
+        let pageTouched = false;
+        const messages = page.messages.map((m) => {
+          if (m.id !== tempId) return m;
+          const media = m.media.map((mm) =>
+            mm.order === order ? { ...mm, uploadProgress: progress, uploadStatus: status } : mm,
+          );
+          pageTouched = true;
+          touched = true;
+          return { ...m, media };
+        });
+        return pageTouched ? { ...page, messages } : page;
+      });
+      return touched ? { ...data, pages } : data;
+    },
+  );
+}
+
 // Phase 5.2 (T7) — flip the client-only `failed` flag on an optimistic (temp-id) message.
 // On send error we mark it failed (kept on screen for retry, NOT rolled back); on retry we
 // clear it (back to the pending/spinner state). No-op if the message isn't in cache.

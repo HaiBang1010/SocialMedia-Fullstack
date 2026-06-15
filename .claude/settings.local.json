@@ -70,7 +70,10 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:3000/health)",
       "Bash(curl -s -o /dev/null -w \"health: %{http_code}\\\\n\" http://localhost:3000/health)",
       "Bash(node tmp-smoke-group.mjs)",
-      "Bash(rm -f tmp-smoke-group.mjs)"
+      "Bash(rm -f tmp-smoke-group.mjs)",
+      "Bash(tasklist //FI \"IMAGENAME eq node.exe\")",
+      "Bash(powershell.exe -NoProfile -Command 'Get-CimInstance Win32_Process -Filter \"name='\\\\''node.exe'\\\\''\" | Select-Object ProcessId, @{n='\\\\''Cmd'\\\\'';e={$_.CommandLine}} | Format-Table -AutoSize -Wrap')",
+      "Bash(powershell.exe -NoProfile -Command 'Get-CimInstance Win32_Process -Filter \"name='\\\\''node.exe'\\\\''\" | Where-Object { $_.CommandLine -like '\\\\''*backend*'\\\\'' -or $_.CommandLine -like '\\\\''*server.ts*'\\\\'' } | Select-Object ProcessId, @{n='\\\\''Cmd'\\\\'';e={$_.CommandLine}} | Format-Table -AutoSize -Wrap')"
     ]
   }
 }

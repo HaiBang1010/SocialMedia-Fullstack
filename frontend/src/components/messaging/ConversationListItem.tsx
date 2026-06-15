@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom';
 import Avatar from '@/components/common/Avatar';
 import GroupAvatar from './GroupAvatar';
 import { formatRelativeTime } from '@/lib/format';
+import { formatMessagePreview } from '@/lib/messagePreview';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/stores/authStore';
 import { usePresenceStore } from '@/stores/presenceStore';
@@ -11,13 +12,6 @@ import type { Conversation } from '@/types/api';
 interface ConversationListItemProps {
   conversation: Conversation;
   isActive: boolean;
-}
-
-// Single-line preview of the last message (CSS-truncated). No messages yet → placeholder.
-function previewText(conversation: Conversation): string {
-  const last = conversation.lastMessage;
-  if (!last) return 'No messages yet';
-  return last.content ?? 'Message';
 }
 
 export default function ConversationListItem({ conversation, isActive }: ConversationListItemProps) {
@@ -46,7 +40,9 @@ export default function ConversationListItem({ conversation, isActive }: Convers
             {formatRelativeTime(conversation.lastMessageAt)}
           </span>
         </div>
-        <p className="truncate text-sm text-muted-foreground">{previewText(conversation)}</p>
+        <p className="truncate text-sm text-muted-foreground">
+          {formatMessagePreview(conversation.lastMessage)}
+        </p>
       </div>
     </NavLink>
   );

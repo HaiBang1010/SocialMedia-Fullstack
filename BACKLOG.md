@@ -85,10 +85,27 @@
 - Distinguish network vs validation errors for retry button visibility
 - Multi-message retry batch (currently per-message only)
 - Seen behavior toggle (IG default vs hide-on-reply) settings
+- [P2] [frontend/app-wide] Toast notification system thay inline error text — UX nhất quán cho
+      mọi error/success toàn app (hiện mỗi nơi tự render inline text + tự-dismiss timeout/manual).
+      Library candidate: **sonner** (shadcn-compat) hoặc react-hot-toast. Files affected:
+      MessageInput (attach limit/validate errors), StoryComposer (upload error), useReactToMessage
+      (error), upload errors (useCreateStory/useCreatePost), auth errors (login/register).
+      Ref: https://sonner.emilkowal.ski/
 
 [Phase 5.3]:
 - Typing in conversation list view ("typing..." subtitle indicator)
 - Unread badge count
+
+[Phase 5.4a — media messages, defer]:
+- [P2] [backend/messages] Orphan S3 media cleanup: upload xong nhưng POST message fail / user bỏ
+      composer → object mồ côi (khớp debt Posts/Stories "orphan check để Phase polish"). MessageMedia
+      đã lưu `objectKey`/`thumbnailObjectKey` ⇒ recall (5.5) xóa được; orphan-sweep cron = Phase polish.
+- [P3] [frontend/messaging] Drag-drop file vào thread + paste ảnh từ clipboard (nice-to-have).
+- [P3] [frontend/messaging] Reorder media trước khi gửi (kéo sắp xếp preview strip).
+- [P3] [frontend/messaging] Edit caption sau khi gửi (cần 5.5 message edit).
+- [P3] [frontend/messaging] Pinch-zoom ảnh trong MediaLightbox (mobile); hiện chỉ swipe + arrows.
+- [P3] [frontend/messaging] Thumbnail ceiling 512px — nếu single-image trông mềm trên màn lớn,
+      nâng ceiling hoặc dùng `url` gốc cho single-image grid cell.
 ## DONE
 
 - 2026-06-10 [frontend/story-viewer] Bar↔video desync khi reopen video (progress bar chạy

@@ -5,9 +5,11 @@ import { useAuthStore } from '@/stores/authStore';
 import { useLongPress } from '@/hooks/useLongPress';
 import { useReactToMessage } from '@/features/messaging/hooks/useReactToMessage';
 import { myReaction } from '@/lib/reactions';
+import { useMediaLightboxStore } from '@/stores/mediaLightboxStore';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import ReactionPicker from './ReactionPicker';
 import ReactionChips from './ReactionChips';
+import MessageMediaGrid from './MessageMediaGrid';
 import type { Message } from '@/types/api';
 
 interface MessageBubbleProps {
@@ -23,8 +25,11 @@ interface MessageBubbleProps {
 export default function MessageBubble({ message, isOwn, showSeenLabel, onRetry }: MessageBubbleProps) {
   const meId = useAuthStore((s) => s.user?.id);
   const { toggle } = useReactToMessage(message.conversationId);
+  const openLightbox = useMediaLightboxStore((s) => s.open);
   const [pickerOpen, setPickerOpen] = useState(false);
 
+  const mediaItems = message.media ?? [];
+  const hasMedia = mediaItems.length > 0;
   const isFailed = message.failed === true;
   // Optimistic messages carry a temp- id until the server responds (a failed one is no longer
   // "pending" — it shows the retry affordance instead of a spinner).
@@ -46,27 +51,39 @@ export default function MessageBubble({ message, isOwn, showSeenLabel, onRetry }
       <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
         <div className={cn('flex items-center gap-1', isOwn ? 'flex-row-reverse' : 'flex-row')}>
           <PopoverAnchor asChild>
+            {/* Anchor wraps media + caption so long-press / picker target the whole message. */}
             <div
               {...(canReact ? longPress : {})}
-              className={cn(
-                // Width is capped by the parent burst column (max-w-[80%]); the bubble itself
-                // must NOT use a fractional max-width — `max-w-[75%]` of the shrink-to-fit wrapper
-                // collapses circularly and forces mid-word breaks ("He/llo"). overflow-wrap:anywhere
-                // breaks long no-space tokens (URLs / "zzzz…") to fit instead of overflowing.
-                'max-w-full whitespace-pre-wrap [overflow-wrap:anywhere] rounded-2xl px-3 py-2 text-sm',
-                isOwn
-                  ? 'rounded-br-sm bg-primary text-primary-foreground'
-                  : 'rounded-bl-sm bg-muted text-foreground',
-                isPending && 'opacity-60',
-                isFailed && 'opacity-70 ring-1 ring-destructive',
-              )}
+              className={cn('flex flex-col gap-1', isOwn ? 'items-end' : 'items-start')}
             >
-              {message.content}
-              {isPending && (
-                <Loader2
-                  className="ml-1 inline size-3 animate-spin align-[-0.1em]"
-                  aria-label="Sending"
-                />
+              {hasMedia && (
+                <div className={cn('overflow-hidden rounded-2xl', isFailed && 'ring-1 ring-destructive')}>
+                  <MessageMediaGrid media={mediaItems} onOpen={(i) => openLightbox(mediaItems, i)} />
+                </div>
+              )}
+              {message.content && (
+                <div
+                  className={cn(
+                    // Width is capped by the parent burst column (max-w-[80%]); the bubble itself
+                    // must NOT use a fractional max-width — `max-w-[75%]` of the shrink-to-fit wrapper
+                    // collapses circularly and forces mid-word breaks ("He/llo"). overflow-wrap:anywhere
+                    // breaks long no-space tokens (URLs / "zzzz…") to fit instead of overflowing.
+                    'max-w-full whitespace-pre-wrap [overflow-wrap:anywhere] rounded-2xl px-3 py-2 text-sm',
+                    isOwn
+                      ? 'rounded-br-sm bg-primary text-primary-foreground'
+                      : 'rounded-bl-sm bg-muted text-foreground',
+                    isPending && 'opacity-60',
+                    isFailed && 'opacity-70 ring-1 ring-destructive',
+                  )}
+                >
+                  {message.content}
+                  {isPending && !hasMedia && (
+                    <Loader2
+                      className="ml-1 inline size-3 animate-spin align-[-0.1em]"
+                      aria-label="Sending"
+                    />
+                  )}
+                </div>
               )}
             </div>
           </PopoverAnchor>

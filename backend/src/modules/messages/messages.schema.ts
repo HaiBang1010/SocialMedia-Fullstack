@@ -1,5 +1,8 @@
 import { z } from 'zod';
-import { MessageContentType } from '@prisma/client';
+import { MessageContentType, MediaType } from '@prisma/client';
+
+// Phase 5.4a — max attachments per message (D-Q1). Exported so the FE can mirror the cap.
+export const MAX_MESSAGE_MEDIA = 10;
 
 /**
  * Phase 5.3a — the 7-emoji quick-react whitelist (Q1, IG/Messenger pattern). These glyphs are
@@ -28,21 +31,73 @@ export const publicUserResponseSchema = z.object({
 });
 
 /**
- * Body for POST /conversations/:id/messages. Phase 5.1 is TEXT-only: contentType is a
- * literal('TEXT'), so the full Postgres MessageContentType enum (EMOJI/POST_SHARE/…) is
- * declared in the DB but gated here — the same pattern StoryItemType used in 4.3a.
- * Phase 5.4 widens this to a discriminatedUnion (image/video/voice/…).
+ * One image/video attachment in a send-message body (Phase 5.4a). The client uploads the
+ * original + a thumbnail/poster to MinIO via presign FIRST, then sends these references.
+ * objectKey / thumbnailObjectKey are persisted so the S3 objects can be cleaned up on recall
+ * (Phase 5.5). thumbnailUrl is required for BOTH types (image thumb / video poster, Q6).
+ * The VIDEO-requires-duration check lives in sendMessageSchema's superRefine (keeps this a
+ * plain object, which zod-to-openapi renders cleanly).
  */
-export const sendMessageSchema = z.object({
-  contentType: z.literal('TEXT'),
-  content: z.string().min(1).max(5000),
+const messageMediaInputSchema = z.object({
+  type: z.nativeEnum(MediaType),
+  order: z.number().int().min(0),
+  url: z.string().url(),
+  objectKey: z.string().min(1),
+  thumbnailUrl: z.string().url(),
+  thumbnailObjectKey: z.string().min(1),
+  width: z.number().int().positive().optional(),
+  height: z.number().int().positive().optional(),
+  duration: z.number().int().positive().optional(),
 });
+
+/**
+ * Body for POST /conversations/:id/messages (Phase 5.4a widens the 5.1 TEXT-only literal).
+ * A message carries an optional text caption AND/OR 1..10 media items (images + videos may be
+ * mixed — D2). The server derives contentType (no media → TEXT; all-video → VIDEO; else IMAGE
+ * marker). superRefine enforces: at least one of content/media, and duration for each VIDEO.
+ */
+export const sendMessageSchema = z
+  .object({
+    content: z.string().trim().max(5000).optional(),
+    media: z.array(messageMediaInputSchema).max(MAX_MESSAGE_MEDIA).optional(),
+  })
+  .superRefine((data, ctx) => {
+    const media = data.media ?? [];
+    if (!data.content && media.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'A message must have text content or at least one media item',
+      });
+    }
+    media.forEach((m, i) => {
+      if (m.type === 'VIDEO' && m.duration == null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['media', i, 'duration'],
+          message: 'duration is required for VIDEO media',
+        });
+      }
+    });
+  });
 
 // One reaction row in a message DTO (Phase 5.3a, D2: RAW rows — the client aggregates into
 // "👍 3  ❤️ 1" via groupReactionsByEmoji). Ordered createdAt asc by the service include.
 export const messageReactionResponseSchema = z.object({
   userId: z.string(),
   emoji: z.string(),
+});
+
+// One media item in a message DTO (Phase 5.4a). WHITELIST — objectKey/thumbnailObjectKey are
+// server-only (cleanup keys) and never exposed. Ordered by `order` asc via the service include.
+export const messageMediaResponseSchema = z.object({
+  id: z.string(),
+  type: z.nativeEnum(MediaType),
+  order: z.number().int(),
+  url: z.string(),
+  thumbnailUrl: z.string().nullable(),
+  width: z.number().int().nullable(),
+  height: z.number().int().nullable(),
+  duration: z.number().int().nullable(),
 });
 
 export const messageResponseSchema = z.object({
@@ -54,6 +109,7 @@ export const messageResponseSchema = z.object({
   createdAt: z.string(), // ISO
   sender: publicUserResponseSchema,
   reactions: z.array(messageReactionResponseSchema),
+  media: z.array(messageMediaResponseSchema),
 });
 
 // GET /conversations/:id/messages — newest-first, cursor-paginated.
@@ -63,4 +119,5 @@ export const messagesListResponseSchema = z.object({
 });
 
 export type SendMessageInput = z.infer<typeof sendMessageSchema>;
+export type MessageMediaInput = z.infer<typeof messageMediaInputSchema>;
 export type ReactionInput = z.infer<typeof reactionSchema>;

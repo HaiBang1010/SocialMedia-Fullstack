@@ -5,6 +5,7 @@ import BottomNav from './BottomNav';
 import PostComposerModal from '@/components/post/PostComposerModal';
 import StoryComposer from '@/components/story/StoryComposer';
 import StoryViewer from '@/components/story/StoryViewer';
+import MediaLightbox from '@/components/messaging/MediaLightbox';
 import { useSocketConnection } from '@/features/messaging/hooks/useSocketConnection';
 import { useGlobalSocketEvents } from '@/features/messaging/hooks/useGlobalSocketEvents';
 
@@ -29,6 +30,8 @@ export default function AppLayout() {
       {/* Global story composer + viewer — opened from the StoryBar. */}
       <StoryComposer />
       <StoryViewer />
+      {/* Global message-media lightbox — opened from a media bubble (Phase 5.4a). */}
+      <MediaLightbox />
     </div>
   );
 }
