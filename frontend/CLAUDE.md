@@ -364,7 +364,7 @@ Nút "+" (`SquarePen`) ở header `ConversationList` → modal tạo group; "...
 > **Tombstone optimistic không flicker**: `useRecallMessage` onMutate patch ngay → bubble thành "Message deleted" tức thì; server trả tombstone (200) reconcile; socket `message:deleted` tới các tab/người khác → patchMessageDeleted (idempotent).
 > **15-phút = client guard + server authority**: RecallMenu ẩn/disable theo `Date.now()-createdAt`; server vẫn 410. Drift nhỏ → request hỏng, optimistic rollback.
 
-## Phase 6 — Audio/Video Calls (LiveKit Cloud) — CODE DONE (live smoke pending)
+## Phase 6 — Audio/Video Calls (LiveKit Cloud) — DONE
 
 1-1 + group calls qua LiveKit Cloud SFU. `tsc -b` + `vite build` 0 lỗi (2125 modules, +24). 10 decision FINAL. **Call-as-Message**: call render trong thread như 1 message `contentType==='CALL'` → `CallEntry` (mirror SharedPostCard branch).
 

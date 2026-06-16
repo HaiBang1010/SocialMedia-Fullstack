@@ -16,7 +16,7 @@ Instagram-like social network — feed, stories, messaging, calls. Build to lear
 | Storage | S3-compatible (MinIO local) — presigned upload |
 | Real-time | Socket.io (active từ Phase 5.2 — message:new, typing, presence, read receipts) |
 | Sticker / GIF | Giphy API qua backend proxy (Phase 5.4c) |
-| Calls (sau này) | WebRTC + simple-peer + TURN server |
+| Calls | LiveKit Cloud — SFU (managed signaling + TURN, Krisp noise-cancel); `@livekit/components-react` + `livekit-client` (Phase 6) |
 
 ## Cấu trúc dự án
 
@@ -33,7 +33,7 @@ social-media/
 ├── .claudeignore               ← file Claude Code không đọc
 ├── .gitignore
 │
-├── backend/                    ← Express API (Phase 1–5 backend ĐÃ XONG — + stories, messaging realtime, media/voice/sticker/GIF, giphy proxy, recall + group create)
+├── backend/                    ← Express API (Phase 1–6 backend ĐÃ XONG — + stories, messaging realtime, media/voice/sticker/GIF, giphy proxy, recall + group create, calls qua LiveKit Cloud)
 │   ├── CLAUDE.md
 │   ├── README.md               ← setup chi tiết từng bước
 │   ├── docker-compose.yml
@@ -48,7 +48,7 @@ social-media/
 │       ├── middleware/
 │       └── modules/
 │
-└── frontend/                   ← React app (Phase 1–5 FE xong — posts/carousel/video/comments + stories + messaging realtime + media/voice/sticker/GIF/emoji + post share + recall + group create)
+└── frontend/                   ← React app (Phase 1–6 FE xong — posts/carousel/video/comments + stories + messaging realtime + media/voice/sticker/GIF/emoji + post share + recall + group create + audio/video calls qua LiveKit)
     ├── CLAUDE.md
     └── README.md
 ```
@@ -62,14 +62,14 @@ social-media/
 ```bash
 cd backend
 npm install
-cp .env.example .env       # đổi 2 JWT_SECRET + thêm GIPHY_API_KEY (sticker/GIF, Phase 5.4c)
+cp .env.example .env       # đổi 2 JWT_SECRET + GIPHY_API_KEY (5.4c) + LIVEKIT_URL/_API_KEY/_API_SECRET (calls, Phase 6)
 docker compose up -d        # khởi Postgres + MinIO
 npx prisma migrate dev      # apply migration
 npm run dev                 # → http://localhost:3000
                             # → http://localhost:3000/docs (Swagger UI)
 ```
 
-### Frontend (Phase 1–5 FE xong)
+### Frontend (Phase 1–6 FE xong)
 
 ```bash
 cd frontend
@@ -77,6 +77,8 @@ npm install
 npm run dev                 # → http://localhost:5173
                             # cần backend chạy :3000 cùng lúc
 ```
+
+> Calls (Phase 6) cần LiveKit Cloud project (free tier) — set `LIVEKIT_*` trong `backend/.env`. Ringtone là asset tùy chọn: đặt `frontend/public/sounds/ringtone.mp3` (CC0); thiếu thì incoming call vẫn chạy, chỉ là ring visual-only.
 
 Đọc `backend/README.md` để setup chi tiết từng bước, đặc biệt nếu bạn mới với full-stack.
 
@@ -94,7 +96,7 @@ npm run dev                 # → http://localhost:5173
 | 4 | Stories: 24h expire, viewer + gestures, text/emoji overlays, archive + cron, profile ring, view count/viewers | ✅ Xong |
 | 5.1–5.4 | Messaging: 1-1 + group, Socket.io realtime (typing/presence/read receipts), reactions, media (image/video) + voice, emoji/sticker/GIF (Giphy), post share | ✅ Xong |
 | 5.5 | Messaging: recall (soft-delete tombstone, 15-phút window) + group create UI (recent + mutual followers); reply-to + group member management → backlog | ✅ Xong |
-| 6 | Calls (audio, video, WebRTC) | ⏳ |
+| 6 | Calls: audio + video, 1-1 + group, qua LiveKit Cloud (SFU). Call-as-Message trong thread + 4 REST + 3 socket events (call:incoming/declined/ended); webhook + screen-share → backlog | ✅ Xong |
 | 7 | Polish (notifications, search, hide bài) | ⏳ |
 
 Chi tiết từng phase: xem `ARCHITECTURE.md`. Tiến độ chi tiết: xem `PROGRESS.md`.
@@ -125,10 +127,11 @@ Chi tiết từng phase: xem `ARCHITECTURE.md`. Tiến độ chi tiết: xem `PR
 
 > Mọi response trả post (single / list / feed) kèm `likesCount`, `commentsCount`, `isLikedByMe`, `isFollowingAuthor`. Chi tiết: `backend/CLAUDE.md` + Swagger `/docs`.
 
-**Stories / Messaging / Giphy** (Phase 4–5) — danh sách đầy đủ trong `backend/CLAUDE.md` + Swagger `/docs` (37 path keys):
+**Stories / Messaging / Giphy / Calls** (Phase 4–6) — danh sách đầy đủ trong `backend/CLAUDE.md` + Swagger `/docs` (41 path keys):
 - **Stories**: `POST/GET /stories`, `GET /stories/feed`, `POST /stories/:id/view`, `GET /stories/:id/views`, `GET /stories/archive`, `GET /users/:username/stories`, `DELETE /stories/:id`
 - **Conversations & Messages**: `POST /conversations/direct|/group`, `GET /conversations[/:id]`, `GET/POST /conversations/:id/messages`, `POST/DELETE /messages/:id/reactions`, `DELETE /messages/:id` (recall, 5.5), `GET /users/groupable` (group create, 5.5)
 - **Giphy proxy**: `GET /giphy/search`, `GET /giphy/trending` (sticker + GIF, key server-side)
+- **Calls** (Phase 6): `POST /calls/start`, `POST /calls/:id/token` (join), `POST /calls/:id/decline`, `POST /calls/:id/end` — LiveKit token mint + lifecycle; call entries hiện trong thread như CALL message
 
 ## Quy ước project
 

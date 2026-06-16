@@ -610,7 +610,7 @@ POST   /calls/:id/end                  # body { action: 'leave'|'end_for_all', r
 | 5.2 Messaging Realtime | 10 | Socket.io infra (JWT handshake + user/convo rooms) + message:new broadcast (REST send unchanged) + typing + presence (online + last-seen, contact-scoped) + read receipts; polling removed | ✅ Done |
 | 5.3-5.4 Messaging | 11-12 | Reactions + GROUP read receipts (5.3) · media image/video + voice + emoji/sticker/GIF + post-share (5.4) | ✅ Done |
 | 5.5 Messaging | 12 | Recall (soft-delete tombstone, sender ≤15min, S3 soft-fail, socket message:deleted) + group create UI (GET /users/groupable recent+mutual merge); reply-to + group member management → BACKLOG | ✅ Done → **Phase 5 complete** |
-| 6. Calls | 13-14 | Audio + video calls (1-1 + group) via LiveKit Cloud SFU. Call-as-Message + 4 REST endpoints + 3 socket events. Code complete; live browser smoke pending | 🔨 Code done |
+| 6. Calls | 13-14 | Audio + video calls (1-1 + group) via LiveKit Cloud SFU. Call-as-Message + 4 REST endpoints + 3 socket events (call:incoming/declined/ended). Webhook + screen-share → backlog | ✅ Done |
 | 7. Polish | 15-16 | Notifications, search, hide bài, bảo mật | ⏳ |
 
 ---

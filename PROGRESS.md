@@ -6,7 +6,7 @@
 
 ---
 
-## 2026-06-16 — Phase 6: Audio/Video Calls (LiveKit Cloud) — CODE DONE
+## 2026-06-16 — Phase 6: Audio/Video Calls (LiveKit Cloud) — ✅ COMPLETE (browser-verified + follow-up fixes)
 
 **Done (static verify: BE `tsc --noEmit` 0 lỗi; FE `tsc -b` + `vite build` 0 lỗi **2125 modules** (+24); migration `add_calls` applied; OpenAPI **37→41** path keys; LiveKit token mint OK (288-char JWT qua dynamic ESM import); server boot OK. **Live 2-user + LiveKit dashboard smoke: pending** + cần `public/sounds/ringtone.mp3`.)** Audio+Video calls 1-1 + group qua **LiveKit Cloud SFU**. 10 decision FINAL — keystone **Call-as-Message** (reuse 5.4c sharedPost infra: pagination/preview/realtime/optimistic free).
 
