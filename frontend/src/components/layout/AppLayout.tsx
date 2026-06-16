@@ -6,8 +6,12 @@ import PostComposerModal from '@/components/post/PostComposerModal';
 import StoryComposer from '@/components/story/StoryComposer';
 import StoryViewer from '@/components/story/StoryViewer';
 import MediaLightbox from '@/components/messaging/MediaLightbox';
+import IncomingCallDialog from '@/components/calls/IncomingCallDialog';
+import InCallView from '@/components/calls/InCallView';
+import JoinCallDialog from '@/components/calls/JoinCallDialog';
 import { useSocketConnection } from '@/features/messaging/hooks/useSocketConnection';
 import { useGlobalSocketEvents } from '@/features/messaging/hooks/useGlobalSocketEvents';
+import { useIncomingCallListener } from '@/features/calls/hooks/useIncomingCallListener';
 
 export default function AppLayout() {
   // Phase 5.2 — open the realtime socket for authenticated users + bind app-wide listeners
@@ -15,6 +19,8 @@ export default function AppLayout() {
   // disconnects when this layout unmounts on logout.
   useSocketConnection();
   useGlobalSocketEvents();
+  // Phase 6 — bind call:incoming / call:declined / call:ended (call message rides message:new).
+  useIncomingCallListener();
 
   return (
     <div className="flex h-screen bg-background text-foreground">
@@ -32,6 +38,10 @@ export default function AppLayout() {
       <StoryViewer />
       {/* Global message-media lightbox — opened from a media bubble (Phase 5.4a). */}
       <MediaLightbox />
+      {/* Phase 6 — global incoming-call dialog + fullscreen in-call view + "join active call" prompt. */}
+      <IncomingCallDialog />
+      <InCallView />
+      <JoinCallDialog />
     </div>
   );
 }

@@ -75,6 +75,55 @@ export function emitMessageDeleted(
   }
 }
 
+// ── Calls (Phase 6) — LiveKit handles all WebRTC signaling, so these are thin notifications.
+// All three follow the same user-room fan-out as emitNewMessage; no offer/answer/ice events.
+
+/** Ring the OTHER participants of a new call (NOT the initiator). Drives the IncomingCallDialog
+ *  + ringtone. `initiator` is the already-serialized public user DTO. */
+export function emitCallIncoming(
+  participantIds: string[],
+  payload: {
+    callId: string;
+    conversationId: string;
+    type: 'AUDIO' | 'VIDEO';
+    isGroup: boolean;
+    initiator: unknown;
+    conversationName: string | null;
+  },
+): void {
+  if (!io) return;
+  for (const userId of participantIds) {
+    io.to(userRoom(userId)).emit('call:incoming', payload);
+  }
+}
+
+/** Tell the initiator a recipient declined (their ringing UI closes). For a DIRECT call this is
+ *  paired with call:ended (the call is also over); for GROUP it's informational (room stays open). */
+export function emitCallDeclined(
+  initiatorId: string,
+  payload: { callId: string; conversationId: string; userId: string },
+): void {
+  if (!io) return;
+  io.to(userRoom(initiatorId)).emit('call:declined', payload);
+}
+
+/** Broadcast that a call is over (final endedAt + reason) to every participant's user room.
+ *  Clients patch the CALL message in their thread (patchCallEnded) + leave the room if in it. */
+export function emitCallEnded(
+  participantIds: string[],
+  payload: {
+    callId: string;
+    conversationId: string;
+    endedAt: string;
+    endedReason: 'COMPLETED' | 'MISSED' | 'DECLINED' | 'FAILED';
+  },
+): void {
+  if (!io) return;
+  for (const userId of participantIds) {
+    io.to(userRoom(userId)).emit('call:ended', payload);
+  }
+}
+
 /** Tell a user's conversation-partners that they just came online (D2: contact-scoped). */
 export function emitPresenceOnline(userId: string, partnerIds: string[]): void {
   if (!io) return;

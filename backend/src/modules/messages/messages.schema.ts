@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MessageContentType, MediaType } from '@prisma/client';
+import { MessageContentType, MediaType, CallType, CallEndReason } from '@prisma/client';
 
 // Phase 5.4a — max attachments per message (D-Q1). Exported so the FE can mirror the cap.
 export const MAX_MESSAGE_MEDIA = 10;
@@ -164,6 +164,18 @@ export const sharedPostResponseSchema = z.object({
     .nullable(),
 });
 
+// Phase 6 — a call event embedded in a CALL message. endedAt null = still ringing/ongoing;
+// endedReason records why it ended (null while active). Duration is derived client-side from
+// startedAt → endedAt.
+export const callResponseSchema = z.object({
+  id: z.string(),
+  type: z.nativeEnum(CallType),
+  startedAt: z.string(), // ISO
+  endedAt: z.string().nullable(),
+  endedReason: z.nativeEnum(CallEndReason).nullable(),
+  initiator: publicUserResponseSchema,
+});
+
 export const messageResponseSchema = z.object({
   id: z.string(),
   conversationId: z.string(),
@@ -179,6 +191,8 @@ export const messageResponseSchema = z.object({
   media: z.array(messageMediaResponseSchema),
   // Phase 5.4c — present (object or null) only meaningful for POST_SHARE; null otherwise.
   sharedPost: sharedPostResponseSchema.nullable(),
+  // Phase 6 — present (object or null) only meaningful for CALL; null otherwise.
+  call: callResponseSchema.nullable(),
 });
 
 // GET /conversations/:id/messages — newest-first, cursor-paginated.

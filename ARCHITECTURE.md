@@ -20,7 +20,7 @@
 | HTTP client | Axios | Có interceptor cho JWT auto-refresh |
 | Forms | react-hook-form + zod | Validation share schema với backend |
 | Real-time | socket.io-client | Cùng version với backend |
-| WebRTC | simple-peer | Abstract WebRTC API |
+| WebRTC | LiveKit (`@livekit/components-react` + `livekit-client`) | SFU managed — signaling + TURN do LiveKit Cloud lo (Phase 6; KHÔNG simple-peer/P2P mesh) |
 
 ### Backend
 | Concern | Choice | Why |
@@ -40,7 +40,7 @@
 ### DevOps (sau này)
 - Docker Compose cho dev local (postgres + redis + minio + backend)
 - Nginx reverse proxy cho prod
-- Coturn cho WebRTC TURN server
+- WebRTC TURN: **LiveKit Cloud** lo (Phase 6 — KHÔNG self-host Coturn). Deploy target: Vercel (FE) + Railway (BE).
 
 ---
 
@@ -337,17 +337,26 @@ model MessageReaction {           // Phase 5
   @@id([messageId, userId])
 }
 
-model Call {                      // Phase 6
-  id             String   @id @default(cuid())
+model Call {                      // Phase 6 (IMPLEMENTED — LiveKit Cloud)
+  id             String         @id @default(cuid()) // = the LiveKit room name (Decision Q9)
   conversationId String
   initiatorId    String
   type           CallType
-  startedAt      DateTime @default(now())
-  endedAt        DateTime?
-  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  startedAt      DateTime       @default(now())
+  endedAt        DateTime?      // null while ringing/ongoing
+  endedReason    CallEndReason? // why it ended (Decision Q3)
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  initiator      User         @relation("initiatedCalls", fields: [initiatorId], references: [id])
+  messages       Message[]    // the CALL entry(ies) referencing this call (1 in practice)
+  @@index([conversationId, startedAt])
 }
 
 enum CallType { AUDIO VIDEO }
+enum CallEndReason { COMPLETED MISSED DECLINED FAILED }
+
+// Call-as-Message (Decision 1): `Message` += `callId String?` + `call Call? @relation(onDelete: SetNull)`
+// and `MessageContentType` += `CALL` — mirrors the 5.4c sharedPost FK, so a call event rides the
+// existing message pipeline (pagination / list preview / message:new / optimistic) for free.
 
 model AudioTrack {                // Phase 3-4
   id        String  @id @default(cuid())
@@ -387,7 +396,9 @@ enum NotificationType { LIKE COMMENT FOLLOW MENTION MESSAGE STORY_VIEW }
 > - `Conversation` thêm **`directKey String? @unique`** (sorted `"userA:userB"` cho DIRECT, null cho GROUP) → `findOrCreateDirectConversation` upsert-on-unique race-safe (KHÔNG `$transaction`) + **`lastMessageAt DateTime @default(now())`** denormalized (bump mỗi send) cho list ordering `[{lastMessageAt desc},{id desc}]` — vì KHÔNG query Prisma nào order parent theo child-latest. `@@index([lastMessageAt])`. `calls Call[]` relation **chưa khai** (Call model defer Phase 6).
 > - `Message`: `replyToId`/`sharedPostId` = **scalar column trơ** (KHÔNG FK relation `replyTo`/`replies`/`sharedPost` như plan — wired 5.5 reply/post-share, theo precedent `Notification.postId/commentId`). `MessageContentType` khai **đủ 8 value** nhưng Zod gate **TEXT** (5.1). `deletedAt?` soft-delete (recall 5.5). `media MessageMedia[]` + `reactions MessageReaction[]` **chưa khai** (model defer 5.4).
 > - `Participant`: `@@id([conversationId, userId])` + `@@index([userId])`; `lastReadMessageId?` lưu sẵn (read-receipt UI → 5.3). `User` thêm `sentMessages[]` + `conversations Participant[]`.
-> - **Defer models (5.4/5.5/6)**: `MessageMedia`, `MessageReaction`, `Call` (+ enum `CallType`) CHƯA migrate. Migration `create_conversations_and_messages`.
+> - **Defer models (5.4/5.5)**: `MessageMedia`, `MessageReaction` CHƯA migrate ở 5.1. Migration `create_conversations_and_messages`.
+>
+> **Phase 6 — `Call` ACTUAL (LiveKit Cloud):** migration `add_calls` thêm model `Call` (id = LiveKit room name, `endedReason CallEndReason?`) + enums `CallType`/`CallEndReason` + `MessageContentType` += `CALL` (`ALTER TYPE ADD VALUE`, PG16 in-transaction) + `Message.callId String?` FK `SetNull` (mirror sharedPost 5.4c) + back-relations `Conversation.calls` / `User.initiatedCalls`. KHÔNG `livekitRoomName` column (= `call.id`). KHÔNG webhook (deferred — missed/ended driven by client + LiveKit `emptyTimeout`).
 >
 > **Phase 5.2 — Realtime (Socket.io):** chỉ thêm **`User.lastSeenAt DateTime?`** (nullable, set lúc socket disconnect — drive presence "last seen"). Migration `add_user_last_seen_at`. **KHÔNG model mới** — read receipts reuse `Participant.lastReadMessageId` (đã có 5.1, nay serialize ra DTO + cập nhật realtime qua `message:read`). Presence + typing là **in-memory** (process-lifetime, KHÔNG persist trừ lastSeenAt). Xem §5 cho event contract.
 >
@@ -464,8 +475,12 @@ GET    /giphy/trending                 # ?type=gif|stickers&limit= (auth require
 # Media upload (Phase 2)
 POST   /media/presign
 
-# Calls (Phase 6 — signaling via socket)
-GET    /calls/turn-credentials
+# Calls (Phase 6 — LiveKit Cloud; mints tokens + tracks lifecycle, LiveKit lo WebRTC signaling)
+POST   /calls/start                    # start a call → 201 { message (CALL), token, url }; 409 if in progress
+POST   /calls/:id/token                # join/accept → 200 { token, url }; 409 full, 410 ended
+POST   /calls/:id/decline              # recipient declines → 200 CALL message
+POST   /calls/:id/end                  # body { action: 'leave'|'end_for_all', reason? } → 200 CALL message
+# (no /calls/:id/history — call entries live in the messages list via Call-as-Message)
 ```
 
 ---
@@ -502,9 +517,12 @@ GET    /calls/turn-credentials
 // ── Deferred ──
 'notification:new'       { notification }           // Phase 7
 
-// ── Calls — Phase 6 (signaling) ──
-'call:offer' / 'call:answer' / 'call:ice' / 'call:end'                  // Client → Server
-'call:incoming' / 'call:answered' / 'call:ice' / 'call:ended'           // Server → Client
+// ── Calls — Phase 6 (LiveKit Cloud; NO offer/answer/ice — LiveKit handles all WebRTC signaling) ──
+// Server → Client only (3 thin notifications, fan out to user rooms like message:new):
+'call:incoming'   { callId, conversationId, type, isGroup, initiator, conversationName } // → recipients
+'call:declined'   { callId, conversationId, userId }                                     // → initiator
+'call:ended'      { callId, conversationId, endedAt, endedReason }                        // → all participants
+// The CALL message itself arrives via the existing 'message:new' (Call-as-Message).
 ```
 
 ---
@@ -546,12 +564,14 @@ GET    /calls/turn-credentials
 - Server emit `message:deleted { conversationId, messageId, deletedAt }` qua socket (user rooms).
 - Client render placeholder **"Message deleted"** (label hành động trong UI = "Delete"; HTTP verb / internal = recall).
 
-### Video calls (WebRTC)
-- Backend chỉ làm **signaling** qua Socket.io — không stream media.
-- Stream peer-to-peer.
-- TURN server BẮT BUỘC. Self-host Coturn hoặc dùng dịch vụ.
-- Frontend dùng `simple-peer`.
-- **Group call > 2 người**: P2P mesh không scale. Cân nhắc SFU (mediasoup) hoặc LiveKit. Bỏ khỏi MVP.
+### Audio/Video calls (LiveKit Cloud — Phase 6)
+- **LiveKit Cloud SFU** lo toàn bộ WebRTC: signaling, media routing, TURN, reconnect, Krisp noise-cancel. KHÔNG simple-peer / P2P mesh / Coturn.
+- Backend (`livekit-server-sdk`) chỉ **mint access token** (`AccessToken`, TTL 1h) + **quản lý room** (`RoomServiceClient.createRoom` maxParticipants 50 + emptyTimeout 600s; `listParticipants` cho 50-cap + group auto-end) + lưu `Call` lifecycle. `lib/livekit.ts` dùng **dynamic `import()`** (SDK là ESM-only, backend compile CommonJS).
+- **Call-as-Message**: call event = `Message` (`contentType CALL`, `callId` FK) → reuse pagination/preview/realtime/optimistic của messaging (mirror sharedPost 5.4c).
+- **Socket events tối thiểu** (3): `call:incoming`/`call:declined`/`call:ended` — chỉ notification, LiveKit lo signaling.
+- **Group**: existing GROUP conversation, unlimited (soft cap 50). Late-join open. Non-initiator `leave` (room tiếp tục); initiator `end_for_all`. Auto-end khi room còn ≤1 (Q1).
+- **Missed**: webhook deferred → initiator FE timeout 30s → `end` reason MISSED.
+- **Deploy**: LiveKit creds trong `backend/.env` (`LIVEKIT_URL`/`_API_KEY`/`_API_SECRET`). Free tier 5000 participant-min + 100 concurrent.
 
 ### Media upload: presigned URLs
 - Client xin presigned URL: `POST /media/presign`.
@@ -590,7 +610,7 @@ GET    /calls/turn-credentials
 | 5.2 Messaging Realtime | 10 | Socket.io infra (JWT handshake + user/convo rooms) + message:new broadcast (REST send unchanged) + typing + presence (online + last-seen, contact-scoped) + read receipts; polling removed | ✅ Done |
 | 5.3-5.4 Messaging | 11-12 | Reactions + GROUP read receipts (5.3) · media image/video + voice + emoji/sticker/GIF + post-share (5.4) | ✅ Done |
 | 5.5 Messaging | 12 | Recall (soft-delete tombstone, sender ≤15min, S3 soft-fail, socket message:deleted) + group create UI (GET /users/groupable recent+mutual merge); reply-to + group member management → BACKLOG | ✅ Done → **Phase 5 complete** |
-| 6. Calls | 13-14 | Audio + video call 1-1 | ⏳ |
+| 6. Calls | 13-14 | Audio + video calls (1-1 + group) via LiveKit Cloud SFU. Call-as-Message + 4 REST endpoints + 3 socket events. Code complete; live browser smoke pending | 🔨 Code done |
 | 7. Polish | 15-16 | Notifications, search, hide bài, bảo mật | ⏳ |
 
 ---

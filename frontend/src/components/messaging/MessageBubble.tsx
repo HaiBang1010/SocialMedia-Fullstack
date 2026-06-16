@@ -13,6 +13,7 @@ import MessageMediaGrid from './MessageMediaGrid';
 import VoicePlayer from './VoicePlayer';
 import SharedPostCard from './SharedPostCard';
 import RecallMenu from './RecallMenu';
+import CallEntry from '@/components/calls/CallEntry';
 import type { Message } from '@/types/api';
 
 interface MessageBubbleProps {
@@ -36,6 +37,7 @@ export default function MessageBubble({ message, isOwn, showSeenLabel, onRetry }
   const isVoice = mediaItems.length === 1 && mediaItems[0]!.type === 'VOICE';
   // Phase 5.4c — standalone content kinds rendered without the usual bubble chrome.
   const isPostShare = message.contentType === 'POST_SHARE';
+  const isCall = message.contentType === 'CALL'; // Phase 6 — rendered as a CallEntry card
   const isJumbomoji = message.contentType === 'EMOJI';
   const isStickerOrGif =
     mediaItems.length === 1 && (mediaItems[0]!.type === 'STICKER' || mediaItems[0]!.type === 'GIF');
@@ -43,8 +45,10 @@ export default function MessageBubble({ message, isOwn, showSeenLabel, onRetry }
   // Optimistic messages carry a temp- id until the server responds (a failed one is no longer
   // "pending" — it shows the retry affordance instead of a spinner).
   const isPending = message.id.startsWith('temp-') && !isFailed;
-  // Can't react to a message that isn't persisted yet (no real id) — covers pending + failed.
-  const canReact = !message.id.startsWith('temp-');
+  // Can't react to: a message that isn't persisted yet (no real id — covers pending + failed), or
+  // a CALL event (display-only history; reactions aren't meaningful). This single gate hides the
+  // long-press, the hover SmilePlus, the reaction chips, AND the recall menu.
+  const canReact = !message.id.startsWith('temp-') && !isCall;
   const myEmoji = myReaction(message.reactions, meId);
 
   // Mobile: long-press the bubble to open the picker (desktop uses the hover button).
@@ -83,7 +87,9 @@ export default function MessageBubble({ message, isOwn, showSeenLabel, onRetry }
               {...(canReact ? longPress : {})}
               className={cn('flex flex-col gap-1', isOwn ? 'items-end' : 'items-start')}
             >
-              {isPostShare ? (
+              {isCall ? (
+                <CallEntry message={message} />
+              ) : isPostShare ? (
                 <div className={cn(isFailed && 'rounded-xl ring-1 ring-destructive')}>
                   <SharedPostCard sharedPost={message.sharedPost ?? null} />
                 </div>
@@ -159,7 +165,8 @@ export default function MessageBubble({ message, isOwn, showSeenLabel, onRetry }
           )}
 
           {/* Phase 5.5 — recall: own, persisted messages get a "…" menu (separate from the react
-              trigger so the two don't collide). Sender-only (Q5); window enforced inside the menu. */}
+              trigger so the two don't collide). Sender-only (Q5); window enforced inside the menu.
+              canReact already excludes temp + CALL (Phase 6 — calls aren't retractable). */}
           {canReact && isOwn && <RecallMenu message={message} />}
         </div>
 

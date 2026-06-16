@@ -9,7 +9,11 @@ export class AppError extends Error {
   constructor(
     public statusCode: number,
     public code: string,
-    message: string
+    message: string,
+    // Optional structured payload merged into the JSON response under `data` (Phase 6: the 409
+    // CallInProgress carries the existing call so the client can offer "Join"). Backward-compatible
+    // — existing throws pass nothing and the response shape is unchanged.
+    public data?: unknown
   ) {
     super(message);
     this.name = 'AppError';
@@ -29,7 +33,11 @@ export const errorHandler: ErrorRequestHandler = (
 ) => {
   // AppError do mình throw
   if (err instanceof AppError) {
-    res.status(err.statusCode).json({ error: err.code, message: err.message });
+    res.status(err.statusCode).json({
+      error: err.code,
+      message: err.message,
+      ...(err.data !== undefined ? { data: err.data } : {}),
+    });
     return;
   }
 

@@ -10,12 +10,20 @@ import type { PaginationInput } from '../posts/posts.schema';
 // public user) + the newest non-deleted message as the list preview (lastMessage).
 const conversationInclude = {
   participants: { include: { user: { select: publicUserSelect } } },
+  // Phase 6 — the single active call (if any) for the "Call in progress · Join" banner. endedAt
+  // null = ongoing; newest first (defensive, normally ≤1 active per conversation).
+  calls: {
+    where: { endedAt: null },
+    orderBy: { startedAt: 'desc' },
+    take: 1,
+    include: { initiator: { select: publicUserSelect } },
+  },
   messages: {
     where: { deletedAt: null },
     orderBy: { createdAt: 'desc' },
     take: 1,
-    // reactions + media + sharedPost kept here too (5.3a/5.4a/5.4c) so serializeMessage's input
-    // type matches messageInclude (type parity); the lastMessage preview carries them at
+    // reactions + media + sharedPost + call kept here too (5.3a/5.4a/5.4c/6) so serializeMessage's
+    // input type matches messageInclude (type parity); the lastMessage preview carries them at
     // negligible cost (one message per conversation).
     include: {
       sender: { select: publicUserSelect },
@@ -25,6 +33,11 @@ const conversationInclude = {
         include: {
           author: { select: publicUserSelect },
           media: { orderBy: { order: 'asc' }, take: 1 },
+        },
+      },
+      call: {
+        include: {
+          initiator: { select: publicUserSelect },
         },
       },
     },
@@ -52,6 +65,18 @@ function serializeConversation(convo: ConversationRow) {
       lastReadMessageId: p.lastReadMessageId,
     })),
     lastMessage: convo.messages[0] ? serializeMessage(convo.messages[0]) : null,
+    // Phase 6 — active call (ongoing), null when none. Shape mirrors a message's `call` card
+    // (endedAt/endedReason are null while active).
+    activeCall: convo.calls[0]
+      ? {
+          id: convo.calls[0].id,
+          type: convo.calls[0].type,
+          startedAt: convo.calls[0].startedAt.toISOString(),
+          endedAt: null,
+          endedReason: null,
+          initiator: convo.calls[0].initiator,
+        }
+      : null,
   };
 }
 

@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { isSameDay } from '@/lib/format';
 import { useInfiniteScroll } from '@/hooks/useInfiniteScroll';
 import { useAuthStore } from '@/stores/authStore';
+import { usePresenceStore } from '@/stores/presenceStore';
 import { useTypingStore } from '@/stores/typingStore';
 import { useMessages } from '@/features/messaging/hooks/useMessages';
 import { useSendMessage } from '@/features/messaging/hooks/useSendMessage';
@@ -234,6 +235,10 @@ function BurstGroup({
   seenInfo: { messageId: string; label: string } | null;
   onRetry: (message: Message) => void;
 }) {
+  // Phase 6 — presence dot on the sender's avatar (others only; own bursts render no avatar, so
+  // self never shows a dot). Per-user selector → only this burst re-renders when its sender's
+  // status flips (Zustand bails on an unchanged boolean).
+  const senderOnline = usePresenceStore((s) => !!s.online[burst.senderId]);
   return (
     <div className={cn('flex gap-2', isOwn ? 'flex-row-reverse' : 'flex-row')}>
       {!isOwn && (
@@ -242,7 +247,7 @@ function BurstGroup({
           to={`/users/${burst.sender.username}`}
           className="mt-auto shrink-0 transition-opacity hover:opacity-80"
         >
-          <Avatar user={burst.sender} size="sm" />
+          <Avatar user={burst.sender} size="sm" online={senderOnline} />
         </Link>
       )}
       <div className={cn('flex max-w-[80%] flex-col gap-1', isOwn ? 'items-end' : 'items-start')}>

@@ -16,6 +16,7 @@ import feedRoutes from "./modules/feed/feed.routes";
 import storiesRoutes from "./modules/stories/stories.routes";
 import conversationsRoutes from "./modules/conversations/conversations.routes";
 import messagesRoutes from "./modules/messages/messages.routes";
+import callsRoutes from "./modules/calls/calls.routes";
 import giphyRoutes from "./modules/giphy/giphy.routes";
 import { startArchiveJob } from "./jobs/archiveExpiredStories";
 import { initSocket } from "./socket";
@@ -67,6 +68,7 @@ app.use("/feed", feedRoutes);
 app.use("/stories", storiesRoutes);
 app.use("/conversations", conversationsRoutes);
 app.use("/messages", messagesRoutes);
+app.use("/calls", callsRoutes);
 app.use("/giphy", giphyRoutes);
 
 // ── ERROR HANDLERS ────────────────────────────

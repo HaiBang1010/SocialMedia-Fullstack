@@ -31,6 +31,7 @@ model User {
   sentMessages Message[]
   conversations Participant[]
   messageReactions MessageReaction[]
+  initiatedCalls Call[] @relation("initiatedCalls") // Phase 6 — calls this user started
   // Follow relation naming is intentionally "inverted" (matches ARCHITECTURE §3):
   // - followers: rows where I am the `following` target  -> people who follow ME
   // - following: rows where I am the `follower`          -> people I follow
@@ -213,6 +214,7 @@ model Conversation {
 
   participants Participant[]
   messages     Message[]
+  calls        Call[] // Phase 6 — calls placed in this conversation
 
   @@index([lastMessageAt]) // conversation-list ordering
 }
@@ -252,6 +254,7 @@ model Message {
   content        String?            @db.Text
   replyToId      String? // reply-to-message reference (relation wired in Phase 5.5)
   sharedPostId   String? // shared-post reference (FK relation `sharedPost` wired in Phase 5.4c)
+  callId         String? // Phase 6 — CALL entry reference (FK relation `call` below)
   deletedAt      DateTime? // soft-delete / recall marker (Phase 5.5)
   createdAt      DateTime           @default(now())
 
@@ -260,6 +263,7 @@ model Message {
   reactions    MessageReaction[]
   media        MessageMedia[] // Phase 5.4a — image/video attachments (1..10, ordered)
   sharedPost   Post?         @relation("SharedPost", fields: [sharedPostId], references: [id], onDelete: SetNull) // Phase 5.4c — post-share preview; SetNull so the message survives a deleted post
+  call         Call?         @relation(fields: [callId], references: [id], onDelete: SetNull) // Phase 6 — CALL entry; SetNull mirrors sharedPost
 
   @@index([conversationId, createdAt]) // message-list cursor (newest-first)
 }
@@ -313,4 +317,39 @@ enum MessageContentType {
   VIDEO // Phase 5.4
   STICKER // Phase 5.4
   GIF // Phase 5.4
+  CALL // Phase 6 — audio/video call event (renders as CallEntry in the thread)
+}
+
+// Phase 6 — one audio/video call. Recorded as a row AND surfaced in the thread via a Message
+// (contentType CALL, Message.callId FK) — mirrors the Phase 5.4c sharedPost infrastructure, so
+// pagination / list-preview / realtime / optimistic all come for free. The LiveKit room name is
+// the Call id itself (Decision 9 — no separate column). endedAt null = still ringing/ongoing;
+// endedReason records WHY it ended (Decision 3). Modeled 1-to-many (messages) to mirror
+// Post.sharedInMessages and dodge Prisma's @unique-on-1-1 requirement; 1-1 in practice.
+model Call {
+  id             String         @id @default(cuid())
+  conversationId String
+  initiatorId    String
+  type           CallType
+  startedAt      DateTime       @default(now())
+  endedAt        DateTime? // null while ringing/ongoing
+  endedReason    CallEndReason? // why the call ended (null while active)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  initiator    User         @relation("initiatedCalls", fields: [initiatorId], references: [id])
+  messages     Message[] // the CALL entry/entries that reference this call (1 in practice)
+
+  @@index([conversationId, startedAt])
+}
+
+enum CallType {
+  AUDIO
+  VIDEO
+}
+
+enum CallEndReason {
+  COMPLETED
+  MISSED
+  DECLINED
+  FAILED
 }

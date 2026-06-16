@@ -235,7 +235,25 @@ export type MessageContentType =
   | 'IMAGE'
   | 'VIDEO'
   | 'STICKER'
-  | 'GIF';
+  | 'GIF'
+  | 'CALL'; // Phase 6 — audio/video call event (renders as CallEntry)
+
+// Phase 6 — audio vs video call.
+export type CallType = 'AUDIO' | 'VIDEO';
+
+// Phase 6 — why a call ended (null while ringing/ongoing).
+export type CallEndReason = 'COMPLETED' | 'MISSED' | 'DECLINED' | 'FAILED';
+
+// Phase 6 — the call embedded in a CALL message (mirror of the backend callResponseSchema).
+// endedAt null = still ringing/ongoing. Duration is derived client-side from startedAt → endedAt.
+export interface CallInfo {
+  id: string;
+  type: CallType;
+  startedAt: string; // ISO
+  endedAt: string | null;
+  endedReason: CallEndReason | null;
+  initiator: PublicUser;
+}
 
 // A conversation member, as returned inside a Conversation (user + admin flag).
 // lastReadMessageId is the member's read cursor — drives the "Seen" indicator (Phase 5.2).
@@ -296,6 +314,7 @@ export interface Message {
   reactions: MessageReaction[]; // Phase 5.3a — RAW rows; aggregated client-side for display
   media: MessageMedia[]; // Phase 5.4a — image/video attachments (ordered; [] for text)
   sharedPost?: SharedPostPreview | null; // Phase 5.4c — POST_SHARE only; null otherwise / deleted
+  call?: CallInfo | null; // Phase 6 — CALL only; null otherwise
   // Client-only (Phase 5.2 T7): set on an optimistic message whose send failed, so the bubble
   // can show a "Failed — tap to retry" affordance. Never sent by the server.
   failed?: boolean;
@@ -312,6 +331,7 @@ export interface Conversation {
   lastMessageAt: string; // ISO — drives list ordering
   participants: Participant[];
   lastMessage: Message | null;
+  activeCall?: CallInfo | null; // Phase 6 — ongoing call (for the "Call in progress · Join" banner)
 }
 
 // GET /conversations — recent activity first, cursor-paginated.
@@ -361,6 +381,53 @@ export interface MessageDeletedPayload {
   conversationId: string;
   messageId: string;
   deletedAt: string; // ISO
+}
+
+// Phase 6 — call socket payloads (LiveKit handles WebRTC; these are thin notifications).
+// call:incoming → recipients (ring + IncomingCallDialog).
+export interface CallIncomingPayload {
+  callId: string;
+  conversationId: string;
+  type: CallType;
+  isGroup: boolean;
+  initiator: PublicUser;
+  conversationName: string | null; // GROUP name, null for DIRECT
+}
+
+// Phase 6 — the fields needed to JOIN an existing call: from a call:incoming payload (accept) OR
+// from a 409 CallInProgress error's `data` (start blocked → "Join it?"). CallIncomingPayload is a
+// superset, so it satisfies this too.
+export type CallJoinInput = Pick<
+  CallIncomingPayload,
+  'callId' | 'conversationId' | 'type' | 'isGroup'
+>;
+
+// call:declined → initiator (a recipient declined; close the ringing UI).
+export interface CallDeclinedPayload {
+  callId: string;
+  conversationId: string;
+  userId: string; // who declined
+}
+
+// call:ended → all participants (the call is over; patch the CALL message + leave the room).
+export interface CallEndedPayload {
+  callId: string;
+  conversationId: string;
+  endedAt: string; // ISO
+  endedReason: CallEndReason;
+}
+
+// POST /calls/start — 201: the CALL message + the initiator's LiveKit token + the wss URL.
+export interface CallStartResponse {
+  message: Message;
+  token: string;
+  url: string;
+}
+
+// POST /calls/:id/token — 200: a fresh access token for a joining participant.
+export interface CallTokenResponse {
+  token: string;
+  url: string;
 }
 
 export interface PresenceSnapshotPayload {

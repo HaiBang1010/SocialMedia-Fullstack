@@ -1,15 +1,18 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Phone, Video } from 'lucide-react';
 import Avatar from '@/components/common/Avatar';
 import GroupAvatar from './GroupAvatar';
 import { formatRelativeTime } from '@/lib/format';
 import { useAuthStore } from '@/stores/authStore';
 import { usePresenceStore } from '@/stores/presenceStore';
+import { useCallStore } from '@/stores/callStore';
 import { useConversation } from '@/features/messaging/hooks/useConversation';
 import { useConversationSocket } from '@/features/messaging/hooks/useConversationSocket';
+import { useAcceptCall } from '@/features/calls/hooks/useAcceptCall';
 import { conversationDisplay } from '@/features/messaging/conversationDisplay';
 import MessageThread from './MessageThread';
 import MessageInput from './MessageInput';
+import CallButtons from '@/components/calls/CallButtons';
 
 interface ConversationDetailProps {
   conversationId: string;
@@ -22,6 +25,16 @@ export default function ConversationDetail({ conversationId }: ConversationDetai
 
   // Join the conversation room + bind typing / read-receipt events for this thread (5.2).
   useConversationSocket(conversationId);
+
+  // Phase 6 — "Call in progress · Join" banner for someone not (yet) in the active call.
+  const currentCall = useCallStore((s) => s.currentCall);
+  const incomingCall = useCallStore((s) => s.incomingCall);
+  const acceptCall = useAcceptCall();
+  const activeCall = conversation?.activeCall ?? null;
+  const showCallBanner =
+    !!activeCall &&
+    currentCall?.callId !== activeCall.id && // already in it
+    incomingCall?.callId !== activeCall.id; // already ringing
 
   const display = conversation ? conversationDisplay(conversation, meId) : null;
   const otherUserId = display?.otherUserId;
@@ -88,7 +101,37 @@ export default function ConversationDetail({ conversationId }: ConversationDetai
             </div>
           </div>
         )}
+
+        {/* Phase 6 — Audio + Video call buttons (DIRECT + GROUP). The name block above is flex-1,
+            so these sit at the right edge of the header. */}
+        {conversation && (
+          <CallButtons conversationId={conversationId} isGroup={conversation.type === 'GROUP'} />
+        )}
       </header>
+
+      {showCallBanner && activeCall && conversation && (
+        <button
+          type="button"
+          onClick={() =>
+            acceptCall.mutate({
+              callId: activeCall.id,
+              conversationId,
+              type: activeCall.type,
+              isGroup: conversation.type === 'GROUP',
+            })
+          }
+          disabled={acceptCall.isPending}
+          className="flex shrink-0 items-center justify-between gap-2 border-b bg-primary/10 px-4 py-2 text-sm text-primary transition-colors hover:bg-primary/15 disabled:opacity-60"
+        >
+          <span className="flex items-center gap-2 font-medium">
+            {activeCall.type === 'VIDEO' ? <Video className="size-4" /> : <Phone className="size-4" />}
+            Call in progress
+          </span>
+          <span className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground">
+            {acceptCall.isPending ? 'Joining…' : 'Join'}
+          </span>
+        </button>
+      )}
 
       <MessageThread
         conversationId={conversationId}

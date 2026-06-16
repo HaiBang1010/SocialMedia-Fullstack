@@ -120,6 +120,28 @@
       recorder pick `isTypeSupported` ưu tiên webm fallback mp4) để Safari ghi âm được.
 - [P3] [frontend/messaging] Pause/resume recording + real waveform (decode audio buffer) +
       trim/preview-before-send (hiện tap stop = auto-send ngay, KHÔNG nghe lại trước khi gửi).
+
+## Phase 6 — Calls (defer; Phase 6 code = LiveKit Cloud, Call-as-Message)
+
+- [P2] [backend/calls] **LiveKit webhook lifecycle** — Phase 6 defer webhook (Decision 2): missed/ended
+      dựa FE 30s timeout + LiveKit `emptyTimeout` 600s. Thêm `POST /calls/webhooks` (verify signature
+      qua `WebhookReceiver`, raw-body middleware TRƯỚC express.json, unauthenticated) handle
+      `room_finished`/`participant_left` → mark ended chính xác (eventual-consistency). Cần ngrok dev
+      hoặc deploy URL. Fix luôn orphan Call row (initiator connect-fail → endedAt null treo) + residual
+      T2: GROUP all-close đồng thời + LiveKit count lag → tới 15s stale-lock; pagehide miss hoàn toàn
+      → ghost lingers (banner "Call in progress" hiện) tới start call lần sau. Webhook = exact end-detection.
+- [P3] [frontend/calls] **Custom LiveKit tiles** — Phase 6 dùng prebuilt `GridLayout` + `@livekit/
+      components-styles` (lệch theme Beng, Decision 7). Build tile riêng bằng `useTracks`/`useParticipants`
+      để khớp design. Kèm: FocusLayout active-speaker (hiện GridLayout), device picker (mic/cam settings).
+- [P3] [frontend/calls] **Screen sharing** (LiveKit hỗ trợ `Track.Source.ScreenShare`) + **background blur**
+      (LiveKit processors) — defer Phase 6.
+- [P3] [calls] **Call token refresh** cho call > 1h (hiện TTL 1h fixed) + **multi-tab call state sync**
+      (callStore per-tab; mở call ở 2 tab cùng user chưa đồng bộ).
+- [P3] [calls] **Reaction trên CALL message** + reply-to CALL — hiện reaction enabled (generic) nhưng
+      chưa thiết kế UX riêng; recall CALL bị chặn (400, events không retractable).
+- [P3] [calls] **Free-tier quota monitor** — LiveKit dashboard 5000 participant-min/mo + 100 concurrent;
+      thêm cảnh báo/graceful error khi gần limit trước khi production.
+
 ## DONE
 
 - 2026-06-10 [frontend/story-viewer] Bar↔video desync khi reopen video (progress bar chạy

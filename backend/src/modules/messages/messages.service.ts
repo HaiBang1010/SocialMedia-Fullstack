@@ -12,7 +12,8 @@ import type { PaginationInput } from '../posts/posts.schema';
 // include dùng chung cho mọi response trả 1 message. reactions ordered oldest-first so the
 // client's groupReactionsByEmoji keeps a stable first-seen emoji order (Phase 5.3a). media
 // ordered by `order` asc so the carousel/grid renders in the sender's chosen sequence (5.4a).
-const messageInclude = {
+// Exported so the calls module can create/serialize a CALL message with the same shape.
+export const messageInclude = {
   sender: { select: publicUserSelect },
   reactions: { orderBy: { createdAt: 'asc' } },
   media: { orderBy: { order: 'asc' } },
@@ -22,6 +23,13 @@ const messageInclude = {
     include: {
       author: { select: publicUserSelect },
       media: { orderBy: { order: 'asc' }, take: 1 },
+    },
+  },
+  // Phase 6 — CALL entry: the call's type/timing/initiator for the in-thread CallEntry card.
+  // null for non-call messages.
+  call: {
+    include: {
+      initiator: { select: publicUserSelect },
     },
   },
 } satisfies Prisma.MessageInclude;
@@ -80,6 +88,19 @@ export function serializeMessage(message: MessageRow) {
                   thumbnailUrl: message.sharedPost.media[0].thumbnailUrl,
                 }
               : null,
+          },
+    // Phase 6 — CALL entry card (narrow); null for non-call messages. endedAt null = still
+    // ringing/ongoing. A recalled call can't happen (recall is blocked on CALL), but stay safe.
+    call:
+      recalled || !message.call
+        ? null
+        : {
+            id: message.call.id,
+            type: message.call.type,
+            startedAt: message.call.startedAt.toISOString(),
+            endedAt: message.call.endedAt ? message.call.endedAt.toISOString() : null,
+            endedReason: message.call.endedReason,
+            initiator: message.call.initiator,
           },
   };
 }
@@ -284,11 +305,16 @@ export async function getConversationPartners(userId: string): Promise<string[]>
 async function assertCanReact(messageId: string, userId: string): Promise<string> {
   const message = await prisma.message.findUnique({
     where: { id: messageId },
-    select: { conversationId: true },
+    select: { conversationId: true, contentType: true },
   });
   if (!message) throw new AppError(404, 'MessageNotFound', 'Message not found');
   if (!(await isParticipant(message.conversationId, userId))) {
     throw new AppError(403, 'Forbidden', 'You are not a participant of this conversation');
+  }
+  // Phase 6 — CALL entries are display-only events; reactions aren't meaningful (mirrors the
+  // recall block). Defense-in-depth: the client also hides the reaction UI on CALL bubbles.
+  if (message.contentType === MessageContentType.CALL) {
+    throw new AppError(400, 'CannotReactToCall', 'You cannot react to a call');
   }
   return message.conversationId;
 }
@@ -351,6 +377,11 @@ export async function recallMessage(messageId: string, userId: string) {
     include: messageInclude,
   });
   if (!message) throw new AppError(404, 'MessageNotFound', 'Message not found');
+
+  // Phase 6 — CALL entries are events, not retractable; they can't be recalled.
+  if (message.contentType === MessageContentType.CALL) {
+    throw new AppError(400, 'CannotRecallCall', 'Call entries cannot be deleted');
+  }
 
   // Idempotent: an already-recalled message just returns its tombstone (no re-emit needed).
   if (message.deletedAt) return serializeMessage(message);

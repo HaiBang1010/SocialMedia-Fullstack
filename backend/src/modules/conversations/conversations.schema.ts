@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ConversationType } from '@prisma/client';
-import { messageResponseSchema, publicUserResponseSchema } from '../messages/messages.schema';
+import { callResponseSchema, messageResponseSchema, publicUserResponseSchema } from '../messages/messages.schema';
 
 /** Start (or reuse) a 1-1 conversation with another user. */
 export const createDirectSchema = z.object({
@@ -35,6 +35,8 @@ export const conversationResponseSchema = z.object({
   lastMessageAt: z.string(), // ISO
   participants: z.array(participantResponseSchema),
   lastMessage: messageResponseSchema.nullable(),
+  // Phase 6 — ongoing call in this conversation (for the "Call in progress · Join" banner), or null.
+  activeCall: callResponseSchema.nullable(),
 });
 
 export const conversationListResponseSchema = z.object({

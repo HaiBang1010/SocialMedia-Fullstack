@@ -30,6 +30,13 @@ const envSchema = z.object({
   // ── Giphy (Phase 5.4c — sticker/GIF proxy) ──
   // Server-side key; the backend proxies search/trending so the key never reaches the client.
   GIPHY_API_KEY: z.string().min(1),
+
+  // ── LiveKit Cloud (Phase 6 — audio/video calls) ──
+  // URL is the wss:// signaling endpoint (handed to the client); API key/secret mint access
+  // tokens + manage rooms server-side (livekit-server-sdk). z.url() accepts wss://.
+  LIVEKIT_URL: z.string().url(),
+  LIVEKIT_API_KEY: z.string().min(1),
+  LIVEKIT_API_SECRET: z.string().min(1),
 });
 
 const parsed = envSchema.safeParse(process.env);

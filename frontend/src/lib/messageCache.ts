@@ -7,7 +7,7 @@
 // reference when nothing changes, so React Query doesn't notify observers needlessly.
 
 import type { InfiniteData, QueryClient } from '@tanstack/react-query';
-import type { Message, MessageReaction, MessagesListResponse } from '@/types/api';
+import type { CallEndReason, Message, MessageReaction, MessagesListResponse } from '@/types/api';
 import { queryKeys } from '@/lib/queryKeys';
 
 // Prepend an (optimistic) message to the FIRST page (newest position). No-op when the
@@ -206,6 +206,36 @@ export function patchMessageDeleted(
           pageTouched = true;
           touched = true;
           return { ...m, deletedAt, content: null, media: [], reactions: [], sharedPost: null };
+        });
+        return pageTouched ? { ...page, messages } : page;
+      });
+      return touched ? { ...data, pages } : data;
+    },
+  );
+}
+
+// Phase 6 — stamp endedAt + endedReason on a CALL message's embedded call (driven by the
+// call:ended socket echo, keyed by callId). Idempotent — guarded on call.endedAt. Same-reference-
+// when-unchanged. No-op if no CALL message with that callId is in the thread cache.
+export function patchCallEnded(
+  qc: QueryClient,
+  conversationId: string,
+  callId: string,
+  endedAt: string,
+  endedReason: CallEndReason,
+): void {
+  qc.setQueryData<InfiniteData<MessagesListResponse>>(
+    queryKeys.messages(conversationId),
+    (data) => {
+      if (!data) return data;
+      let touched = false;
+      const pages = data.pages.map((page) => {
+        let pageTouched = false;
+        const messages = page.messages.map((m) => {
+          if (m.call?.id !== callId || m.call.endedAt) return m;
+          pageTouched = true;
+          touched = true;
+          return { ...m, call: { ...m.call, endedAt, endedReason } };
         });
         return pageTouched ? { ...page, messages } : page;
       });

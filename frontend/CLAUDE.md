@@ -32,8 +32,8 @@
 - **HTTP**: axios với interceptor để gắn JWT + auto-refresh
 - **Routing**: React Router v6
 - **Forms**: react-hook-form + Zod (share schema với backend)
-- **Real-time** (sau): socket.io-client
-- **WebRTC** (sau): simple-peer
+- **Real-time**: socket.io-client (Phase 5.2)
+- **WebRTC**: `@livekit/components-react` + `livekit-client` + `@livekit/components-styles` (Phase 6 — LiveKit Cloud SFU; KHÔNG simple-peer)
 
 ## Cấu trúc khi build
 
@@ -363,3 +363,41 @@ Nút "+" (`SquarePen`) ở header `ConversationList` → modal tạo group; "...
 > **Recall trigger TÁCH long-press** (Decision 6): long-press/hover GIỮ cho reaction picker (5.3a); "..." button riêng cho recall. 2 Popover instance độc lập trong cùng bubble — RecallMenu dùng `PopoverTrigger` chuẩn (KHÔNG custom anchor) nên KHÔNG dính gotcha anchor-race của reaction Popover.
 > **Tombstone optimistic không flicker**: `useRecallMessage` onMutate patch ngay → bubble thành "Message deleted" tức thì; server trả tombstone (200) reconcile; socket `message:deleted` tới các tab/người khác → patchMessageDeleted (idempotent).
 > **15-phút = client guard + server authority**: RecallMenu ẩn/disable theo `Date.now()-createdAt`; server vẫn 410. Drift nhỏ → request hỏng, optimistic rollback.
+
+## Phase 6 — Audio/Video Calls (LiveKit Cloud) — CODE DONE (live smoke pending)
+
+1-1 + group calls qua LiveKit Cloud SFU. `tsc -b` + `vite build` 0 lỗi (2125 modules, +24). 10 decision FINAL. **Call-as-Message**: call render trong thread như 1 message `contentType==='CALL'` → `CallEntry` (mirror SharedPostCard branch).
+
+- [x] **Deps**: `@livekit/components-react` + `livekit-client` + `@livekit/components-styles` (prebuilt GridLayout + CSS riêng — chấp nhận lệch design "Beng" Phase 6, custom defer polish).
+- [x] **Types** (`types/api.ts`): `MessageContentType += 'CALL'`; `CallType`/`CallEndReason`; `CallInfo` (mirror BE callResponseSchema: id/type/startedAt/endedAt/endedReason/initiator — duration derive client từ startedAt→endedAt); `Message.call?`; socket payloads `CallIncoming/Declined/EndedPayload`; `CallStart/TokenResponse`.
+- [x] **`api/calls.ts`**: `start/getToken/decline/end` (+ barrel). **`stores/callStore.ts`** (Zustand mirror mediaLightboxStore): `incomingCall`/`currentCall {callId,conversationId,type,isGroup,isInitiator,token,url}`/`status idle|connecting|connected|ended` + `setIncoming/clearIncoming/startCall/setConnected/reset`.
+- [x] **Hooks** `features/calls/hooks/`: `useStartCall` (mutate→start, set currentCall connecting; CALL message tự tới qua `message:new`), `useAcceptCall` (getToken→startCall; 409/410 surface error), `useDeclineCall` (onSettled clearIncoming), `useEndCall` (onSettled reset), `useRingtone(active)` (preload `/sounds/ringtone.mp3` loop + autoplay-catch → visual-only fallback), `useIncomingCallListener` (bind `call:incoming`→setIncoming [skip nếu busy], `call:declined`→reset nếu DIRECT current, `call:ended`→`patchCallEnded`+clearIncoming/reset; **`[qc,status]` re-bind** mirror useGlobalSocketEvents; CALL message vẫn ride `message:new`).
+- [x] **`lib/messageCache.patchCallEnded(qc,convId,callId,endedAt,endedReason)`** (match by `call.id`, idempotent guard `call.endedAt`, same-ref). **`lib/call.ts`**: `callDurationSeconds` + `callStatusLabel` (Missed[red]/Declined/Failed/`type call · M:SS`/ongoing) — reuse CallEntry + `messagePreview` CALL branch (`📞 …`).
+- [x] **Components** `components/calls/`: `CallEntry` (icon Phone/Video + status label, **display-only** — KHÔNG call-back click; call initiate CHỈ qua header CallButtons, per user decision round-4), `CallButtons` (header Audio+Video, disable khi busy, request Notification permission lần đầu), `IncomingCallDialog` (Dialog `showClose=false`, ringtone, Accept→`useAcceptCall`/Decline→`useDeclineCall`, **30s auto-dismiss**, ESC/overlay→decline), `InCallView` (fullscreen `z-[70]`, `<LiveKitRoom connect video={type===VIDEO} audio>` + `<GridLayout tracks={useTracks Camera+placeholder}><ParticipantTile/></GridLayout>` + `RoomAudioRenderer` + onError→reset; `MissedTimeout` child: initiator + no remote 30s → end MISSED), `CallControls` (`useLocalParticipant` mute/camera; **dynamic End**: DIRECT/non-initiator="leave"; GROUP initiator=Popover Leave|End-for-all→`EndCallConfirmDialog`), `CallHeader` (type + duration timer / "Calling…"), `EndCallConfirmDialog`.
+- [x] **Integration**: `MessageBubble` CALL branch (đầu ternary, trước POST_SHARE) + `conversationType` prop (thread MessageThread→BurstGroup→bubble→CallEntry cho call-back isGroup) + **hide RecallMenu khi CALL**. `ConversationDetail` header +`CallButtons` (isGroup từ conversation.type). `AppLayout` +`useIncomingCallListener()` + mount `<IncomingCallDialog/>`+`<InCallView/>`.
+- [ ] **Asset cần user**: `public/sounds/ringtone.mp3` (Freesound CC0). Thiếu → ringtone fail im lặng (visual-only ring).
+
+> **CALL message = real id ngay** (server tạo, tới qua message:new) ⇒ `canReact` true (reaction OK), KHÔNG temp/spinner, KHÔNG recall menu.
+> **InCallView mount khi `currentCall != null`** (KHÔNG chỉ status connected) — initiator thấy "Calling…" ngay khi ringing; LiveKit `ParticipantConnected` = "answered" (KHÔNG cần `call:answered` event).
+> **isInitiator/isGroup từ callStore** (KHÔNG dùng LiveKit hook để biết) — `isInitiator` quyết "End for all" menu, `isGroup` quyết leave-vs-end semantics.
+> **3 socket events thôi** (incoming/declined/ended) — LiveKit lo offer/answer/ice nội bộ.
+
+### Phase 6 follow-up — Issue 1: 409 CallInProgress (ghost-block + harsh UX)
+
+`useStartCall.onError` (axios `isAxiosError`) detect 409 `CallInProgress` → đọc `error.response.data.data {callId,conversationId,type,isGroup}` → `callStore.setJoinPrompt`. `JoinCallDialog` (mount AppLayout, mirror confirm dialog) "There's already an active call. Join it?" → [Join] `useAcceptCall(joinPrompt)` / [Cancel] clear. **`useAcceptCall` param `CallIncomingPayload` → `CallJoinInput`** (`Pick<…,'callId'|'conversationId'|'type'|'isGroup'>`, dùng chung accept incoming + join-from-409; CallIncomingPayload là superset). `callStore` +`joinPrompt`/`setJoinPrompt`/`clearJoinPrompt`. BE side: stale-lock reap ghost + 409 carry data (xem backend/CLAUDE.md). Skip pagehide handler (scope; stale-lock + LiveKit emptyTimeout đủ).
+
+### Phase 6 follow-up round 2 — 3 issues (browser test)
+
+- **Issue 1 — call hang khi peer close tab**: `InCallView` `MissedTimeout` → **`CallLifecycle`** (2 effect): MISSED (initiator, chưa ai join, 30s) GIỮ + **last-participant** mới (`remoteCount===0 AND hadRemote` → `ALONE_GRACE_MS=5s` → `endCall('leave')`). `hadRemote` ref phân biệt "everyone left" vs "ring chưa ai join". Cả 2 cùng close <5s → ghost → stale-lock reap.
+- **Issue 2 — "End for all" KHÔNG work**: root cause **z-index** — Radix Popover/Dialog portal `<body>` **z-50** < `InCallView` **z-[70]** ⇒ dropdown + confirm SAU lưng call view, unclickable. Fix `CallControls` bỏ Popover + EndCallConfirmDialog → **inline dropdown** (`fixed inset-0 z-[75]` click-catcher + menu z-[80]) + **inline confirm** (`fixed inset-0 z-[80]`) trong InCallView stacking context. Xóa `EndCallConfirmDialog.tsx` (orphan). (BE thêm `deleteRoom` force-kick — xem backend.)
+- **Issue 3 — banner "Call in progress" cho non-participant**: `Conversation.activeCall?: CallInfo` + `ConversationDetail` banner (gate `activeCall && currentCall?.callId!==id && incomingCall?.callId!==id`) → `useAcceptCall({callId,conversationId,type,isGroup})`. `useIncomingCallListener.onIncoming` invalidate `conversation(id)` (banner hiện sau dismiss ring); onEnded invalidate conversations() (banner ẩn).
+
+### Phase 6 follow-up round 3 — T2: both-close → 60s + FAILED
+
+**`InCallView` pagehide handler** (Decision D re-enabled): useEffect (TRƯỚC early-return, deps `[]`) `window.addEventListener('pagehide')` → `fetch(\`${VITE_API_URL}/calls/:id/end\`, {method:'POST', **keepalive:true**, headers:{Authorization: Bearer accessToken}, body:{action:'leave'}})` fire-and-forget (`.catch(()=>{})`). **keepalive** (KHÔNG `sendBeacon` — cần auth header); token `useAuthStore.getState().accessToken`. Đọc fresh state lúc fire (handler reads getState, KHÔNG closure). InCallView luôn mounted (AppLayout) ⇒ listener always-on, no-op khi `!currentCall`. ⇒ tab close → endCall ~1s thay vì stale-lock. BE: STALE 60→15s + `inferEndReason` (age ≥10s COMPLETED / <10s FAILED) — xem backend/CLAUDE.md.
+
+### Phase 6 follow-up round 4 — 2 UX fixes
+
+- **CallEntry call-back click → REVERTED (round 4)**: user KHÔNG muốn click CallEntry start call. `CallEntry` = **display-only `<div>`** (icon + label, no onClick/cursor/disabled/useStartCall). Call initiate CHỈ qua header `CallButtons`. Gỡ luôn `conversationType` threading (MessageThread→BurstGroup→MessageBubble→CallEntry) vốn chỉ phục vụ call-back — MessageThread GIỮ `conversationType` (seenInfo dùng).
+- **Presence dot**: thêm `Avatar online` cho **MessageThread BurstGroup** (`usePresenceStore(s=>!!s.online[burst.senderId])` per-user selector → scoped re-render; self không avatar) + **IncomingCallDialog** initiator. (ConversationListItem + ConversationDetail header đã có từ 5.2.) Contact-scoped presence cover group members.
+- **Block reactions trên CALL** (display-only events): `MessageBubble.canReact = !temp && !isCall` (1 gate ẩn long-press + hover SmilePlus + ReactionChips; RecallMenu gate `canReact && isOwn`). BE defense `assertCanReact` (react+unreact dùng chung): `contentType==='CALL'` → 400 CannotReactToCall.

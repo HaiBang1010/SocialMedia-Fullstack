@@ -18,4 +18,5 @@ export { followsApi } from './follows';
 export { storiesApi } from './stories';
 export { conversationsApi } from './conversations';
 export { messagesApi } from './messages';
+export { callsApi } from './calls';
 export { giphyApi, type GiphyType } from './giphy';
