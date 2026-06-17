@@ -32,7 +32,7 @@
 | Database | PostgreSQL 16 | Relational data + JSON fields khi cần |
 | Cache + Pub/Sub | Redis (sau này) | Sessions, rate limit, Socket.io adapter |
 | Real-time | Socket.io (sau này) | Rooms, namespaces, fallback transports |
-| Auth | JWT raw (jsonwebtoken) | Stateless, mobile-friendly, không cần Passport |
+| Auth | JWT raw (jsonwebtoken) | Stateless. Access token in-memory + refresh token httpOnly cookie (Polish R1 — xem §6 "Auth token transport") |
 | API Docs | Swagger UI + zod-to-openapi | Schema-first, 1 nguồn truth |
 | Storage | S3-compatible | MinIO local (active từ Phase 2), R2/S3 prod |
 | Validation | Zod | Share schema với frontend |
@@ -604,6 +604,12 @@ POST   /calls/:id/end                  # body { action: 'leave'|'end_for_all', r
 - Swagger UI render spec tại `/docs` (dev-only).
 - **KHÔNG viết JSDoc Swagger tay trên routes.**
 
+### Auth token transport (Phase Polish R1 — httpOnly cookie)
+- **Access token**: 1h, client giữ **in-memory** (Zustand, KHÔNG localStorage/persist). Gửi qua `Authorization: Bearer`.
+- **Refresh token**: 7d, **httpOnly cookie** (`sameSite:'lax'`, `secure` prod-only, `path:'/auth'`) — JS không đọc được → mitigate XSS token theft (trước Polish lưu localStorage). Cookie **set/clear ở route** (không service). `/auth/refresh` đọc cookie (non-rotating). `cookie-parser` + CORS `credentials:true` + origin explicit.
+- **Boot-restore**: reload không có session persisted → `useAuthBootstrap` gọi `/auth/refresh` → `/auth/me`; route guards (`authStatus: loading|authenticated|unauthenticated`) hiện spinner tới khi resolve. Interceptor 401 → single-flight refresh → retry / logout.
+- **Out of scope → BACKLOG**: refresh-token rotation + reuse detection; CSRF token (hiện mitigate bằng sameSite=lax + path-scope `/auth`).
+
 ---
 
 ## 7. Build Phases
@@ -628,6 +634,7 @@ POST   /calls/:id/end                  # body { action: 'leave'|'end_for_all', r
 | 5.5 Messaging | 12 | Recall (soft-delete tombstone, sender ≤15min, S3 soft-fail, socket message:deleted) + group create UI (GET /users/groupable recent+mutual merge); reply-to + group member management → BACKLOG | ✅ Done → **Phase 5 complete** |
 | 6. Calls | 13-14 | Audio + video calls (1-1 + group) via LiveKit Cloud SFU. Call-as-Message + 4 REST endpoints + 3 socket events (call:incoming/declined/ended). Webhook + screen-share → backlog | ✅ Done |
 | 7. Polish | 15-16 | Notifications (LIKE/COMMENT/FOLLOW + 1h dedupe + `notification:new`) + unread badges + Postgres full-text search (tsvector + GIN) + default avatar (DiceBear). Hide bài / block / MENTION+STORY_VIEW notif / push → backlog | ✅ Done → **project 7/7 complete** |
+| Polish R1 | — | Toast (sonner) + Safari iOS voice (`audio/mp4`) + reply-to-message FULL (quote bubble + scroll/jump + long-press action sheet) + httpOnly cookie auth (refresh cookie + access token in-memory + boot-gate) | ✅ Done |
 
 ---
 

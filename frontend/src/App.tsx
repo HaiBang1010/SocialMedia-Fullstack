@@ -5,12 +5,15 @@ import {
   useLocation,
   type Location,
 } from 'react-router-dom';
+import { Toaster } from 'sonner';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import PublicOnlyRoute from '@/components/PublicOnlyRoute';
 import AppLayout from '@/components/layout/AppLayout';
 import AuthLayout from '@/components/layout/AuthLayout';
 import { useThemeEffect } from '@/hooks/useThemeEffect';
+import { useAuthBootstrap } from '@/hooks/useAuthBootstrap';
 import { useAuthStore } from '@/stores/authStore';
+import { useThemeStore } from '@/stores/themeStore';
 import FeedPage from '@/pages/FeedPage';
 import LoginPage from '@/pages/LoginPage';
 import RegisterPage from '@/pages/RegisterPage';
@@ -32,6 +35,10 @@ function ProfileRedirect() {
 export default function App() {
   // Keep <html> `.dark` class in sync with the theme store.
   useThemeEffect();
+  // Phase Polish — restore the session from the httpOnly refresh cookie on load (gates route guards).
+  useAuthBootstrap();
+  // Toast theme follows the app theme (light/dark) so toasts match dark mode.
+  const theme = useThemeStore((s) => s.theme);
 
   // When a post is opened from the feed on desktop, we stash the feed location
   // in `state.background` so the main <Routes> keeps rendering the feed while
@@ -73,6 +80,11 @@ export default function App() {
           </Route>
         </Routes>
       )}
+
+      {/* App-wide toasts (Phase Polish 1A). Mounted here — OUTSIDE both AuthLayout
+          and AppLayout — so login/register network errors surface too. theme tracks
+          the theme store to match dark mode. */}
+      <Toaster position="top-right" theme={theme} richColors closeButton />
     </>
   );
 }

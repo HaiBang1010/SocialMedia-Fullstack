@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { mediaApi, storiesApi, uploadToPresignedUrl } from '@/api';
 import { queryKeys } from '@/lib/queryKeys';
+import { notifySuccess } from '@/lib/toast';
 import { useAuthStore } from '@/stores/authStore';
 import type { CroppedImage } from '@/lib/cropImage';
 import type { VideoMedia } from '@/lib/video';
@@ -108,6 +109,8 @@ export function useCreateStory() {
       if (me) {
         qc.invalidateQueries({ queryKey: queryKeys.userStories(me.username) });
       }
+      // Success toast — your own story shows in the bar but a quick confirm is friendly.
+      notifySuccess('Story added');
     },
   });
 

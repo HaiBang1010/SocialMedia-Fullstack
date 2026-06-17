@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { mediaApi, postsApi, uploadToPresignedUrl } from '@/api';
 import { queryKeys } from '@/lib/queryKeys';
+import { notifySuccess } from '@/lib/toast';
 import { useAuthStore } from '@/stores/authStore';
 import type { CroppedImage } from '@/lib/cropImage';
 import type { VideoMedia } from '@/lib/video';
@@ -151,6 +152,8 @@ export function useCreatePost() {
       if (me) {
         qc.invalidateQueries({ queryKey: queryKeys.userPosts(me.username) });
       }
+      // Success toast — a new post never lands in your own feed, so confirm it shipped.
+      notifySuccess('Post shared');
     },
   });
 

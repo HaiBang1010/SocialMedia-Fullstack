@@ -1,6 +1,7 @@
-import { Fragment, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronDown } from 'lucide-react';
+import { toast } from 'sonner';
 import Avatar from '@/components/common/Avatar';
 import { cn } from '@/lib/utils';
 import { isSameDay } from '@/lib/format';
@@ -11,7 +12,7 @@ import { useTypingStore } from '@/stores/typingStore';
 import { useMessages } from '@/features/messaging/hooks/useMessages';
 import { useSendMessage } from '@/features/messaging/hooks/useSendMessage';
 import { groupMessagesByBurst, type MessageBurst } from '@/lib/messageBurst';
-import type { ConversationType, Message, Participant } from '@/types/api';
+import type { ConversationType, Message, Participant, ReplyPreview } from '@/types/api';
 import MessageBubble from './MessageBubble';
 import DateSeparator from './DateSeparator';
 import TypingIndicator from './TypingIndicator';
@@ -23,9 +24,19 @@ interface MessageThreadProps {
   // "Seen by N" / "Seen by all" (GROUP) positionally. Undefined while the conversation loads.
   participants?: Participant[];
   conversationType?: ConversationType;
+  // Phase Polish — set the reply target (a bubble's "Reply" action); lifted to ConversationDetail.
+  onReply: (reply: ReplyPreview) => void;
 }
 
 const GAP_MS = 60 * 60 * 1000; // insert a separator on a >1h gap between same-day bursts
+const MAX_JUMP_FETCHES = 10; // cap older-page paging when jumping to a quoted message (Phase Polish)
+
+// Phase Polish — smoothly scroll a quoted message into view + a brief highlight flash.
+function flashAndScroll(el: HTMLElement) {
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  el.classList.add('reply-flash');
+  window.setTimeout(() => el.classList.remove('reply-flash'), 1500);
+}
 
 // A date separator precedes a burst when it's the first one, the day changed, or there's a >1h gap.
 function shouldShowSeparator(prev: MessageBurst | undefined, current: MessageBurst): boolean {
@@ -38,6 +49,7 @@ export default function MessageThread({
   conversationId,
   participants,
   conversationType,
+  onReply,
 }: MessageThreadProps) {
   const meId = useAuthStore((s) => s.user?.id);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -60,7 +72,9 @@ export default function MessageThread({
   // text and media (media resumes from the stashed attachments — only unfinished items re-upload).
   const onRetry = useCallback(
     (m: Message) => {
-      send({ tempId: m.id, content: m.content ?? undefined, isRetry: true });
+      // Re-send with the same temp id; carry replyToId (off the failed bubble's replyTo) so a
+      // retried reply stays a reply. replyTo preview is already on the kept optimistic bubble.
+      send({ tempId: m.id, content: m.content ?? undefined, isRetry: true, replyToId: m.replyTo?.id });
     },
     [send],
   );
@@ -135,6 +149,62 @@ export default function MessageThread({
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, []);
 
+  // Phase Polish — jump to a quoted message. data-message-id on each bubble is the target. If it
+  // isn't loaded yet, page older messages (cap MAX_JUMP_FETCHES) until it appears, then scroll.
+  const pendingJumpId = useRef<string | null>(null);
+  const jumpFetchCount = useRef(0);
+
+  const findBubble = useCallback(
+    (id: string) =>
+      scrollRef.current?.querySelector<HTMLElement>(`[data-message-id="${id}"]`) ?? null,
+    [],
+  );
+
+  // Page one older batch FOR A JUMP. Reuses the loadingOlder flag so the existing layout effect
+  // keeps the viewport stable on the prepend (R2) — the retry effect then scrolls to the target.
+  const fetchOlderForJump = useCallback(() => {
+    if (scrollRef.current) prevScrollHeight.current = scrollRef.current.scrollHeight;
+    loadingOlder.current = true;
+    jumpFetchCount.current += 1;
+    fetchNextPage();
+  }, [fetchNextPage]);
+
+  const scrollToMessage = useCallback(
+    (id: string) => {
+      const el = findBubble(id);
+      if (el) {
+        flashAndScroll(el);
+        return;
+      }
+      jumpFetchCount.current = 0; // fresh paging session for this jump
+      if (hasNextPage) {
+        pendingJumpId.current = id;
+        fetchOlderForJump();
+      } else {
+        toast.error('Message not available');
+      }
+    },
+    [findBubble, hasNextPage, fetchOlderForJump],
+  );
+
+  // After messages change while a jump is pending: scroll to the now-loaded target, or page more.
+  useEffect(() => {
+    const id = pendingJumpId.current;
+    if (!id) return;
+    const el = findBubble(id);
+    if (el) {
+      pendingJumpId.current = null;
+      jumpFetchCount.current = 0;
+      requestAnimationFrame(() => flashAndScroll(el)); // let the prepended page lay out first
+    } else if (hasNextPage && jumpFetchCount.current < MAX_JUMP_FETCHES) {
+      fetchOlderForJump();
+    } else {
+      pendingJumpId.current = null;
+      jumpFetchCount.current = 0;
+      toast.error('Message not available');
+    }
+  }, [messages, hasNextPage, findBubble, fetchOlderForJump]);
+
   // Load older messages when the top sentinel appears. Capture scrollHeight first so the
   // layout effect can restore the viewport (prepending at the top would otherwise jump).
   useInfiniteScroll(topRef, {
@@ -198,6 +268,8 @@ export default function MessageThread({
                   isOwn={burst.senderId === meId}
                   seenInfo={seenInfo}
                   onRetry={onRetry}
+                  onReply={onReply}
+                  onJumpTo={scrollToMessage}
                 />
               </Fragment>
             ))}
@@ -229,11 +301,15 @@ function BurstGroup({
   isOwn,
   seenInfo,
   onRetry,
+  onReply,
+  onJumpTo,
 }: {
   burst: MessageBurst;
   isOwn: boolean;
   seenInfo: { messageId: string; label: string } | null;
   onRetry: (message: Message) => void;
+  onReply: (reply: ReplyPreview) => void;
+  onJumpTo: (id: string) => void;
 }) {
   // Phase 6 — presence dot on the sender's avatar (others only; own bursts render no avatar, so
   // self never shows a dot). Per-user selector → only this burst re-renders when its sender's
@@ -258,6 +334,8 @@ function BurstGroup({
             isOwn={isOwn}
             showSeenLabel={isOwn && m.id === seenInfo?.messageId ? seenInfo.label : undefined}
             onRetry={onRetry}
+            onReply={onReply}
+            onJumpTo={onJumpTo}
           />
         ))}
       </div>

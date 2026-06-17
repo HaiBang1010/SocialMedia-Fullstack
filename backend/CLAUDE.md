@@ -90,8 +90,9 @@ router.post('/x', validate(xSchema), asyncHandler(async (req, res) => {
 
 ## Auth flow đã chốt
 
-- Access token: 1h, gửi qua `Authorization: Bearer <token>` header
-- Refresh token: 7d, gửi trong response body (Phase 1 đơn giản; Phase polish sẽ chuyển sang httpOnly cookie)
+- Access token: 1h, gửi qua `Authorization: Bearer <token>` header; client giữ **in-memory** (Zustand, KHÔNG persist).
+- Refresh token: 7d, **httpOnly cookie** (`name=refreshToken`, `sameSite:'lax'`, `secure` prod-only, `path:'/auth'`, `maxAge` 7d) — Polish R1 (trước đây trả trong response body). Cookie **set/clear ở ROUTE** (`auth.routes.ts`), KHÔNG ở service (rule "services không res/req"). `cookie-parser` middleware ở `server.ts`.
+- `/auth/login` + `/auth/register` body trả `{ user, accessToken }` (KHÔNG refreshToken). `/auth/refresh` đọc `req.cookies.refreshToken` (401 nếu thiếu), **non-rotating** (không set cookie mới). `/auth/logout` → `clearCookie` + 204.
 - JWT payload: `{ sub: userId, username, type: 'access' | 'refresh' }`
 - Verify type của token — refresh token KHÔNG được dùng làm access
 
@@ -102,16 +103,16 @@ router.post('/x', validate(xSchema), asyncHandler(async (req, res) => {
 | GET | `/health` | - | health check |
 | GET | `/docs` | - | Swagger UI (dev only) |
 | GET | `/docs/json` | - | OpenAPI 3.1 spec JSON (dev only) |
-| POST | `/auth/register` | - | tạo user |
-| POST | `/auth/login` | - | login (email hoặc username) |
-| POST | `/auth/refresh` | - | xin access token mới |
+| POST | `/auth/register` | - | tạo user → `{user, accessToken}` + set refreshToken httpOnly cookie (Polish R1) |
+| POST | `/auth/login` | - | login (email hoặc username) → `{user, accessToken}` + set refreshToken httpOnly cookie (Polish R1) |
+| POST | `/auth/refresh` | cookie | đọc refreshToken **cookie** (no body) → access token mới (non-rotating); thiếu cookie → 401 (Polish R1) |
 | GET | `/auth/me` | ✓ | user hiện tại |
-| POST | `/auth/logout` | - | placeholder |
+| POST | `/auth/logout` | - | clearCookie refreshToken → **204** (Polish R1; was 200 placeholder) |
 | GET | `/users/groupable` | ✓ | users addable to a new group — recent conversation partners + mutual followers, merged (recent first, mutual alphabetical), deduped, self excluded; `?q=` partial username/name, `?limit=` ≤50 → bare `GroupableUser[]` (publicUser + `source`) (Phase 5.5) |
 | GET | `/users/:username` | optional | profile public + counts (posts/followers/following) + isFollowing |
 | GET | `/users/:username/posts` | optional | list post của user (cursor pagination) |
 | PATCH | `/users/me` | ✓ | sửa profile |
-| POST | `/media/presign` | ✓ | xin presigned URL upload |
+| POST | `/media/presign` | ✓ | xin presigned URL upload (image/video/`audio/webm`/`audio/mp4` [Safari voice, Polish R1]; voice cap 10MB) |
 | POST | `/posts` | ✓ | tạo post (ảnh và/hoặc caption) |
 | GET | `/posts/:id` | optional | xem 1 post (private/followers + non-owner → 404) |
 | PATCH | `/posts/:id` | ✓ | sửa caption/visibility (owner) |
@@ -140,7 +141,7 @@ router.post('/x', validate(xSchema), asyncHandler(async (req, res) => {
 | GET | `/conversations` | ✓ | conversations của viewer, `lastMessageAt` desc, cursor → `{ conversations, nextCursor }` (Phase 5.1) |
 | GET | `/conversations/:id` | ✓ | 1 conversation (**participant only → 404 nếu không phải, ẩn existence**) (Phase 5.1) |
 | GET | `/conversations/:id/messages` | ✓ | messages **newest-first**, cursor (participant → 404 else) → `{ messages, nextCursor }` (Phase 5.1) |
-| POST | `/conversations/:id/messages` | ✓ | gửi message — text caption AND/OR `media[]` 1–10 (image/video/voice/sticker/GIF) OR `sharedPostId`; contentType DERIVED server-side (TEXT/EMOJI/IMAGE/VIDEO/VOICE/STICKER/GIF/POST_SHARE); participant → **403** else; bump `lastMessageAt` + sender `lastReadMessageId` (Phase 5.1 text → 5.4a media → 5.4b voice → 5.4c emoji/sticker/GIF + post-share) |
+| POST | `/conversations/:id/messages` | ✓ | gửi message — text caption AND/OR `media[]` 1–10 (image/video/voice/sticker/GIF) OR `sharedPostId`; contentType DERIVED server-side (TEXT/EMOJI/IMAGE/VIDEO/VOICE/STICKER/GIF/POST_SHARE); participant → **403** else; bump `lastMessageAt` + sender `lastReadMessageId`; + optional `replyToId` (Polish R1 — same-conversation, else **400 InvalidReplyTarget**) (Phase 5.1 text → 5.4a media → 5.4b voice → 5.4c emoji/sticker/GIF + post-share → Polish reply-to) |
 | POST | `/messages/:id/reactions` | ✓ | set/replace reaction (body `{emoji}` whitelist 7; participant → **403**, message không tồn tại → **404**; upsert composite PK) → full message (Phase 5.3a) |
 | DELETE | `/messages/:id/reactions` | ✓ | gỡ reaction của mình (idempotent `deleteMany`; 403/404 cùng gate) → full message (Phase 5.3a) |
 | DELETE | `/messages/:id` | ✓ | recall (soft-delete) message — **sender only → 403**, không tồn tại → **404**, quá 15 phút → **410**; set `deletedAt`, clear reactions, best-effort xóa S3 media (soft-fail); emit `message:deleted` → **tombstone message** (Phase 5.5) |
@@ -200,6 +201,8 @@ Khi thêm endpoint mới, update bảng trên.
 > **Phase 6 follow-up round 3 (T2 — both-close → 60s+FAILED)**: **`STALE_CALL_MS` 60_000→15_000** (ringing call KHÔNG empty vì initiator connected ⇒ chỉ cần > connect window). **`inferEndReason(startedAt)`** (`CONNECTED_MIN_MS=10_000`): finalize KHÔNG reason explicit (leave/end_for_all) + stale-lock → age ≥10s = COMPLETED / <10s = FAILED (call <10s = never connected); explicit MISSED/DECLINED bypass. Áp: createCall stale-lock (bỏ hardcode FAILED) + endCall 3 finalize (`reason ?? inferEndReason(call.startedAt)`). FE thêm pagehide keepalive `endCall('leave')` (xem frontend). Residual webhook-defer: GROUP all-close + LiveKit count lag → tới 15s; pagehide miss hoàn toàn → ghost tới start sau (banner lingers).
 >
 > **Phase 6 follow-up round 4 (block react CALL)**: `assertCanReact` (dùng chung reactToMessage + removeReaction) select +`contentType`; sau participant-403 → `contentType==='CALL'` → **400 CannotReactToCall** (mirror recall CALL block, defense-in-depth; FE cũng ẩn reaction UI). CallEntry call-back click reverted → display-only (FE-only).
+
+> **Polish Round 1 (4 items)**: **(B) Reply-to** — migration **`add_message_reply_to_relation`** (self-relation `Message.replyTo`/`replies` `onDelete:SetNull` + `@@index([replyToId])`; cột `replyToId` đã có 5.1 ⇒ additive). `messageInclude.replyTo` **select narrow** (id/contentType/content/deletedAt/sender — KHÔNG đệ quy/media/reactions) + `serializeMessage.replyTo` (recalled→null; original-recalled→content null, không leak). **TYPE-PARITY lesson #6**: `conversationInclude.messages.include.replyTo` y hệt (serializeMessage dùng chung). `sendMessage` validate `replyToId` same-conversation → **400 InvalidReplyTarget** (missing OR cross-conv, không leak existence). `replyPreviewResponseSchema` DEDICATED (KHÔNG ref messageResponseSchema → tránh OpenAPI self-recursion). **(C) Safari voice** — presign enum +`audio/mp4`, `AUDIO_CONTENT_TYPES` +`audio/mp4`, `EXT_BY_MIME["audio/mp4"]="m4a"`, `MAX_VOICE_BYTES` **5→10MB** (AAC nặng hơn Opus); VOICE derive theo `MediaType` (MIME-agnostic, không đổi). **(D) httpOnly cookie** — xem "Auth flow" trên. **(A) Toast** = FE-only. OpenAPI vẫn **47 paths** (chỉ widen schema). **⚠️ Migration gotcha**: `prisma migrate dev` MỚI khi `searchVector` (GENERATED tsvector Phase 7) còn tồn tại sẽ emit drift giả (`DROP DEFAULT` trên generated column → 42601) → workaround: `--create-only` + hand-strip 4 câu searchVector + `migrate deploy` (KHÔNG re-diff shadow-DB).
 
 ## Khi thêm feature mới
 

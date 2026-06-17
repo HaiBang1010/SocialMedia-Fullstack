@@ -27,10 +27,9 @@ export const authApi = {
     return data;
   },
 
-  refresh: async (refreshToken: string): Promise<RefreshResponse> => {
-    const { data } = await apiClient.post<RefreshResponse>('/auth/refresh', {
-      refreshToken,
-    });
+  // Phase Polish — no body: the refresh token rides the httpOnly cookie (withCredentials).
+  refresh: async (): Promise<RefreshResponse> => {
+    const { data } = await apiClient.post<RefreshResponse>('/auth/refresh');
     return data;
   },
 

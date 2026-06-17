@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { VOICE_MAX_DURATION } from '@/lib/audio';
+import { VOICE_MAX_DURATION, baseVoiceMime, pickSupportedVoiceMime } from '@/lib/audio';
 
-// Phase 5.4b — tap-to-toggle voice recording via MediaRecorder (WebM/Opus, Q1/Q2). Duration is
-// measured by a wall-clock timer (WebM from MediaRecorder has no reliable duration metadata).
-// Auto-stops at VOICE_MAX_DURATION. `denied`/`unsupported` surface as states for an inline error.
+// Phase 5.4b — tap-to-toggle voice recording via MediaRecorder. Duration is measured by a
+// wall-clock timer (recorded audio has no reliable duration metadata). Auto-stops at
+// VOICE_MAX_DURATION. `denied`/`unsupported` surface as states for a toast (Plan A).
+// Plan C: the MIME is now chosen per-browser (WebM/Opus preferred, audio/mp4 for iOS Safari).
 export type RecorderState = 'idle' | 'requesting' | 'recording' | 'denied' | 'unsupported';
-
-const PREFERRED_MIME = 'audio/webm;codecs=opus';
 
 export interface VoiceResult {
   blob: Blob;
   duration: number; // seconds
+  mimeType: 'audio/webm' | 'audio/mp4'; // container MIME chosen for this recording (Plan C)
 }
 
 export function useVoiceRecorder(onComplete: (result: VoiceResult) => void) {
@@ -23,6 +23,8 @@ export function useVoiceRecorder(onComplete: (result: VoiceResult) => void) {
   const timerRef = useRef<number | null>(null);
   const startAtRef = useRef(0);
   const cancelledRef = useRef(false);
+  // Base container MIME chosen at start() — read in onstop to build the Blob + report it out.
+  const mimeRef = useRef<'audio/webm' | 'audio/mp4'>('audio/webm');
   const onCompleteRef = useRef(onComplete);
   onCompleteRef.current = onComplete;
 
@@ -39,11 +41,13 @@ export function useVoiceRecorder(onComplete: (result: VoiceResult) => void) {
 
   const start = useCallback(async () => {
     if (state === 'recording' || state === 'requesting') return;
-    if (
-      typeof MediaRecorder === 'undefined' ||
-      !navigator.mediaDevices?.getUserMedia ||
-      !MediaRecorder.isTypeSupported('audio/webm')
-    ) {
+    if (typeof MediaRecorder === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+      setState('unsupported');
+      return;
+    }
+    // Plan C: pick the first MIME this browser can record (WebM/Opus, else audio/mp4 for Safari).
+    const chosenMime = pickSupportedVoiceMime();
+    if (!chosenMime) {
       setState('unsupported');
       return;
     }
@@ -52,8 +56,9 @@ export function useVoiceRecorder(onComplete: (result: VoiceResult) => void) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
-      const mimeType = MediaRecorder.isTypeSupported(PREFERRED_MIME) ? PREFERRED_MIME : 'audio/webm';
-      const rec = new MediaRecorder(stream, { mimeType });
+      const baseMime = baseVoiceMime(chosenMime);
+      mimeRef.current = baseMime;
+      const rec = new MediaRecorder(stream, { mimeType: chosenMime });
       recorderRef.current = rec;
       chunksRef.current = [];
       cancelledRef.current = false;
@@ -63,13 +68,14 @@ export function useVoiceRecorder(onComplete: (result: VoiceResult) => void) {
       };
       rec.onstop = () => {
         const duration = Math.round((Date.now() - startAtRef.current) / 1000);
-        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        const mimeType = mimeRef.current;
+        const blob = new Blob(chunksRef.current, { type: mimeType });
         const cancelled = cancelledRef.current;
         cleanup();
         setState('idle');
         setElapsed(0);
         if (!cancelled && blob.size > 0 && duration > 0) {
-          onCompleteRef.current({ blob, duration: Math.min(duration, VOICE_MAX_DURATION) });
+          onCompleteRef.current({ blob, duration: Math.min(duration, VOICE_MAX_DURATION), mimeType });
         }
       };
 

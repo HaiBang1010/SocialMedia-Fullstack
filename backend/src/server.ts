@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import morgan from "morgan";
 import swaggerUi from "swagger-ui-express";
@@ -39,7 +40,10 @@ app.use(
   }),
 );
 
-// 3. Parse JSON body (giới hạn 10MB phòng request lớn)
+// 3. Parse cookies — the refresh token lives in an httpOnly cookie (Phase Polish auth).
+app.use(cookieParser());
+
+// 4. Parse JSON body (giới hạn 10MB phòng request lớn)
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 

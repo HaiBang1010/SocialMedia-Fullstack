@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { postsApi } from '@/api';
 import { patchPostInCaches } from '@/lib/postCache';
+import { notifyError } from '@/lib/toast';
 import type { Post, UpdatePostInput } from '@/types/api';
 
 interface UpdateVars {
@@ -21,6 +22,9 @@ export function useUpdatePost() {
     mutationFn: ({ postId, input }) => postsApi.update(postId, input),
     onSuccess: (updated) => {
       patchPostInCaches(qc, updated.id, () => updated);
+    },
+    onError: (err) => {
+      notifyError(err, "Couldn't update post");
     },
   });
 

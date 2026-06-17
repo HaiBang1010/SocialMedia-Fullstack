@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { followsApi } from '@/api';
 import { queryKeys } from '@/lib/queryKeys';
+import { notifyError } from '@/lib/toast';
 import type { FollowResponse, ProfileResponse } from '@/types/api';
 
 type FollowDirection = 'follow' | 'unfollow';
@@ -59,8 +60,9 @@ export function useFollowMutation(username: string, direction: FollowDirection) 
       return { prev };
     },
 
-    onError: (_err, _vars, ctx) => {
+    onError: (err, _vars, ctx) => {
       if (ctx) qc.setQueryData(queryKeys.user(username), ctx.prev);
+      notifyError(err, following ? "Couldn't follow user" : "Couldn't unfollow user");
     },
 
     onSuccess: (data) => {

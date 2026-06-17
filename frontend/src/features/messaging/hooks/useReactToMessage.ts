@@ -2,6 +2,7 @@ import { useMutation, useQueryClient, type InfiniteData } from '@tanstack/react-
 import { messagesApi } from '@/api';
 import { queryKeys } from '@/lib/queryKeys';
 import { patchMessageReactions } from '@/lib/messageCache';
+import { notifyError } from '@/lib/toast';
 import { useAuthStore } from '@/stores/authStore';
 import type { Message, MessagesListResponse } from '@/types/api';
 
@@ -38,8 +39,9 @@ export function useReactToMessage(conversationId: string) {
       return { prev };
     },
 
-    onError: (_err, _vars, ctx) => {
+    onError: (err, _vars, ctx) => {
       if (ctx?.prev) qc.setQueryData(queryKeys.messages(conversationId), ctx.prev);
+      notifyError(err, "Couldn't react to message");
     },
 
     onSuccess: (data) => {

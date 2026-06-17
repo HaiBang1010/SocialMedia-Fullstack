@@ -40,6 +40,17 @@ const conversationInclude = {
           initiator: { select: publicUserSelect },
         },
       },
+      // Phase Polish — reply preview, SAME narrow select as messageInclude.replyTo (type parity:
+      // serializeMessage is shared, so the lastMessage preview must carry replyTo too).
+      replyTo: {
+        select: {
+          id: true,
+          contentType: true,
+          content: true,
+          deletedAt: true,
+          sender: { select: publicUserSelect },
+        },
+      },
     },
   },
 } satisfies Prisma.ConversationInclude;

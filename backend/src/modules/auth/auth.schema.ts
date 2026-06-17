@@ -20,11 +20,9 @@ export const loginSchema = z.object({
   password: z.string().min(1, 'Password is required'),
 });
 
-export const refreshSchema = z.object({
-  refreshToken: z.string().min(1, 'Refresh token is required'),
-});
+// Phase Polish — /auth/refresh now reads the token from an httpOnly cookie (not the body), so the
+// old refreshSchema body validator was removed.
 
 // Type inference từ schema — đỡ phải khai báo type riêng
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
-export type RefreshInput = z.infer<typeof refreshSchema>;

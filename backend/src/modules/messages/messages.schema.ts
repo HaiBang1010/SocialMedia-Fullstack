@@ -67,6 +67,9 @@ export const sendMessageSchema = z
     // Phase 5.4c — share a post into the conversation. Exclusive with media; a caption is allowed
     // (E2). The server validates viewability + derives contentType POST_SHARE.
     sharedPostId: z.string().cuid().optional(),
+    // Phase Polish — reply to another message in THIS conversation. Orthogonal to content/media/
+    // sharedPost (a reply can carry text + media). The server validates same-conversation existence.
+    replyToId: z.string().cuid().optional(),
   })
   .superRefine((data, ctx) => {
     const media = data.media ?? [];
@@ -176,6 +179,18 @@ export const callResponseSchema = z.object({
   initiator: publicUserResponseSchema,
 });
 
+// Phase Polish — a NARROW preview of the message this one replies to (the quote bubble). Just
+// enough to render author + a content label; click-through scrolls to the original. content is
+// null when the original was recalled (deletedAt set) — never leak recalled text. This is a
+// DEDICATED schema (NOT messageResponseSchema) so OpenAPI doesn't recurse on a self-$ref.
+export const replyPreviewResponseSchema = z.object({
+  id: z.string(),
+  contentType: z.nativeEnum(MessageContentType),
+  content: z.string().nullable(),
+  deletedAt: z.string().nullable(),
+  sender: publicUserResponseSchema,
+});
+
 export const messageResponseSchema = z.object({
   id: z.string(),
   conversationId: z.string(),
@@ -193,6 +208,9 @@ export const messageResponseSchema = z.object({
   sharedPost: sharedPostResponseSchema.nullable(),
   // Phase 6 — present (object or null) only meaningful for CALL; null otherwise.
   call: callResponseSchema.nullable(),
+  // Phase Polish — the message this one replies to (quote bubble); null when not a reply or the
+  // original was deleted via FK SetNull.
+  replyTo: replyPreviewResponseSchema.nullable(),
 });
 
 // GET /conversations/:id/messages — newest-first, cursor-paginated.

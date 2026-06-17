@@ -6,6 +6,7 @@ import { Loader2 } from 'lucide-react';
 import { authApi } from '@/api/auth';
 import { useAuthStore } from '@/stores/authStore';
 import { getStatus } from '@/lib/apiError';
+import { notifyError } from '@/lib/toast';
 import { loginSchema, type LoginValues } from '@/lib/validations/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -39,21 +40,19 @@ export default function LoginPage() {
     mutationFn: (values: LoginValues) =>
       authApi.login(values.identifier, values.password),
     onSuccess: (res) => {
-      login(res.user, {
-        accessToken: res.accessToken,
-        refreshToken: res.refreshToken,
-      });
+      // Refresh token is now an httpOnly cookie (set by the server); body carries user + accessToken.
+      login(res.user, res.accessToken);
       navigate('/', { replace: true });
     },
     onError: (err) => {
+      // 401 (wrong credentials) stays inline under the form (Hybrid decision); any
+      // other failure (network / 500) surfaces as a toast.
       if (getStatus(err) === 401) {
         form.setError('root', {
           message: 'Invalid email/username or password',
         });
       } else {
-        form.setError('root', {
-          message: 'Something went wrong. Please try again.',
-        });
+        notifyError(err, 'Something went wrong. Please try again.');
       }
     },
   });

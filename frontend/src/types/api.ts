@@ -47,19 +47,14 @@ export interface ProfileUser extends PublicUser {
 
 // ── Auth ───────────────────────────────────────────────────────────────
 
-export interface AuthTokens {
-  accessToken: string;
-  refreshToken: string;
-}
-
-// POST /auth/register, POST /auth/login
+// POST /auth/register, POST /auth/login — Phase Polish: the refresh token is delivered as an
+// httpOnly cookie (Set-Cookie), NOT in the body. The body carries only the user + access token.
 export interface AuthResponse {
   user: User;
   accessToken: string;
-  refreshToken: string;
 }
 
-// POST /auth/refresh — only a new access token, refresh token unchanged.
+// POST /auth/refresh — reads the refresh cookie, returns only a new access token (non-rotating).
 export interface RefreshResponse {
   accessToken: string;
 }
@@ -298,6 +293,16 @@ export interface SharedPostPreview {
   firstMedia: Pick<PostMedia, 'type' | 'url' | 'thumbnailUrl'> | null;
 }
 
+// Phase Polish — NARROW preview of the message a reply quotes (the quote bubble). Mirror of the
+// backend replyPreviewResponseSchema. content is null when the original was recalled (deletedAt set).
+export interface ReplyPreview {
+  id: string;
+  contentType: MessageContentType;
+  content: string | null;
+  deletedAt: string | null;
+  sender: PublicUser;
+}
+
 // One message. Returned BARE by POST /conversations/:id/messages and inside the
 // messages list. content is null for media-only messages and deleted/recalled ones (5.5).
 export interface Message {
@@ -315,6 +320,7 @@ export interface Message {
   media: MessageMedia[]; // Phase 5.4a — image/video attachments (ordered; [] for text)
   sharedPost?: SharedPostPreview | null; // Phase 5.4c — POST_SHARE only; null otherwise / deleted
   call?: CallInfo | null; // Phase 6 — CALL only; null otherwise
+  replyTo?: ReplyPreview | null; // Phase Polish — quoted message this replies to; null otherwise
   // Client-only (Phase 5.2 T7): set on an optimistic message whose send failed, so the bubble
   // can show a "Failed — tap to retry" affordance. Never sent by the server.
   failed?: boolean;
@@ -521,7 +527,8 @@ export interface PresignRequest {
     | 'image/gif'
     | 'image/avif'
     | 'video/mp4'
-    | 'audio/webm';
+    | 'audio/webm'
+    | 'audio/mp4';
   size: number;
 }
 
@@ -605,6 +612,7 @@ export interface SendMessageInput {
   content?: string;
   media?: MessageMediaInput[];
   sharedPostId?: string; // Phase 5.4c — share a post; exclusive with media, caption allowed
+  replyToId?: string; // Phase Polish — reply to a message in the same conversation
 }
 
 // Phase 5.4c — one Giphy result (GET /giphy/search|trending), trimmed server-side.

@@ -17,7 +17,7 @@ import {
 } from '@/features/messaging/mediaUpload';
 import { isEmojiOnly } from '@/lib/emoji';
 import { useAuthStore } from '@/stores/authStore';
-import type { Message, MessageContentType, MessageMedia } from '@/types/api';
+import type { Message, MessageContentType, MessageMedia, ReplyPreview } from '@/types/api';
 
 interface SendMessageVars {
   // Optimistic id of the bubble. Caller generates a fresh `temp-…` for a new send; a RETRY reuses
@@ -26,6 +26,11 @@ interface SendMessageVars {
   tempId: string;
   content?: string;
   isRetry?: boolean;
+  // Phase Polish — reply target. replyToId goes to the server; replyTo is the preview rendered on
+  // the optimistic bubble (built from the quoted message in cache). A retry passes replyToId again
+  // (read off the failed bubble's replyTo.id) but not replyTo (already on the temp message).
+  replyToId?: string;
+  replyTo?: ReplyPreview;
 }
 
 interface SendMessageContext {
@@ -61,7 +66,7 @@ export function useSendMessage(conversationId: string) {
   const me = useAuthStore((s) => s.user);
 
   return useMutation<Message, Error, SendMessageVars, SendMessageContext>({
-    mutationFn: async ({ tempId, content }) => {
+    mutationFn: async ({ tempId, content, replyToId }) => {
       const attachments = getPendingAttachments(tempId) ?? [];
       let media;
       if (attachments.length > 0) {
@@ -69,10 +74,14 @@ export function useSendMessage(conversationId: string) {
           patchMessageMediaProgress(qc, conversationId, tempId, order, progress, status),
         );
       }
-      return conversationsApi.sendMessage(conversationId, { content: content || undefined, media });
+      return conversationsApi.sendMessage(conversationId, {
+        content: content || undefined,
+        media,
+        replyToId,
+      });
     },
 
-    onMutate: async ({ tempId, content, isRetry }) => {
+    onMutate: async ({ tempId, content, isRetry, replyTo }) => {
       await qc.cancelQueries({ queryKey: queryKeys.messages(conversationId) });
 
       // Retry: clear the failed flag, and reset still-unfinished media items to the uploading
@@ -116,6 +125,7 @@ export function useSendMessage(conversationId: string) {
         sender: me,
         reactions: [],
         media,
+        replyTo: replyTo ?? null,
       };
       insertOptimisticMessage(qc, conversationId, optimistic);
       return { tempId };

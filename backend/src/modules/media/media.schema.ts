@@ -5,10 +5,13 @@ import { z } from "zod";
 // in this phase, so the original is what gets stored).
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // 10 MB
 export const MAX_VIDEO_BYTES = 50 * 1024 * 1024; // 50 MB
-export const MAX_VOICE_BYTES = 5 * 1024 * 1024; // 5 MB — voice clip ≤ 5 min (Phase 5.4b)
+// 10 MB — voice clip ≤ 5 min. Bumped from 5 MB in Plan C: iOS Safari records AAC (audio/mp4),
+// ~3-5× heavier than WebM/Opus, so a 5-min Safari note (~4.8 MB) sat at the old edge.
+export const MAX_VOICE_BYTES = 10 * 1024 * 1024;
 
 const VIDEO_CONTENT_TYPES = new Set<string>(["video/mp4"]);
-const AUDIO_CONTENT_TYPES = new Set<string>(["audio/webm"]);
+// audio/webm (Chrome/Firefox WebM/Opus) + audio/mp4 (iOS Safari AAC, Plan C).
+const AUDIO_CONTENT_TYPES = new Set<string>(["audio/webm", "audio/mp4"]);
 
 // Base object (no refinement) — registered with OpenAPI so the spec stays a clean
 // object schema. The size cap is a cross-field rule expressed in the refined
@@ -22,12 +25,13 @@ export const presignRequestBaseSchema = z.object({
     "image/avif",
     "video/mp4",
     "audio/webm",
+    "audio/mp4",
   ]),
   size: z
     .number()
     .int()
     .positive()
-    .describe("Bytes. Max 10MB images, 50MB video/mp4, 5MB audio/webm."),
+    .describe("Bytes. Max 10MB images, 50MB video/mp4, 10MB audio (webm/mp4)."),
 });
 
 // Runtime validation schema: enforces the per-contentType size cap. The error is
@@ -47,7 +51,7 @@ export const presignRequestSchema = presignRequestBaseSchema.superRefine(
         message: isVideo
           ? "File too large (max 50MB for video)"
           : isAudio
-            ? "File too large (max 5MB for voice)"
+            ? "File too large (max 10MB for voice)"
             : "File too large (max 10MB for images)",
       });
     }

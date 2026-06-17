@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Phone, Video } from 'lucide-react';
 import Avatar from '@/components/common/Avatar';
@@ -13,6 +14,7 @@ import { conversationDisplay } from '@/features/messaging/conversationDisplay';
 import MessageThread from './MessageThread';
 import MessageInput from './MessageInput';
 import CallButtons from '@/components/calls/CallButtons';
+import type { ReplyPreview } from '@/types/api';
 
 interface ConversationDetailProps {
   conversationId: string;
@@ -22,6 +24,11 @@ export default function ConversationDetail({ conversationId }: ConversationDetai
   const navigate = useNavigate();
   const meId = useAuthStore((s) => s.user?.id);
   const { data: conversation } = useConversation(conversationId);
+
+  // Phase Polish — reply target, lifted here so the bubble (in MessageThread) can set it and the
+  // composer (MessageInput, a sibling) can preview + send it. Reset on conversation switch.
+  const [replyingTo, setReplyingTo] = useState<ReplyPreview | null>(null);
+  useEffect(() => setReplyingTo(null), [conversationId]);
 
   // Join the conversation room + bind typing / read-receipt events for this thread (5.2).
   useConversationSocket(conversationId);
@@ -137,8 +144,13 @@ export default function ConversationDetail({ conversationId }: ConversationDetai
         conversationId={conversationId}
         conversationType={conversation?.type}
         participants={conversation?.participants}
+        onReply={setReplyingTo}
       />
-      <MessageInput conversationId={conversationId} />
+      <MessageInput
+        conversationId={conversationId}
+        replyingTo={replyingTo}
+        onCancelReply={() => setReplyingTo(null)}
+      />
     </div>
   );
 }

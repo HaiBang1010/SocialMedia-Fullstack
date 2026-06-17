@@ -1,68 +1,52 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 import { queryClient } from '@/lib/queryClient';
-import type { AuthTokens, User } from '@/types/api';
+import type { User } from '@/types/api';
 
-// SECURITY NOTE (Phase 1): tokens persisted to localStorage are readable by
-// any XSS payload. Accepted trade-off for now; Phase polish moves refresh
-// token to an httpOnly cookie. Tracked in BACKLOG.
+// Phase Polish — auth state is MEMORY-ONLY (no localStorage / no persist middleware). The refresh
+// token lives in an httpOnly cookie (unreadable by JS → mitigates XSS token theft); the access
+// token is held here in memory and restored on reload by useAuthBootstrap (POST /auth/refresh →
+// GET /auth/me). `authStatus` gates the route guards while that boot-refresh is in flight, so the
+// app shows a spinner instead of bouncing to /login before the session is known.
+export type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated';
 
 interface AuthState {
   user: User | null;
   accessToken: string | null;
-  refreshToken: string | null;
+  // Kept (derived from authStatus) because useSocketConnection gates the socket on it.
   isAuthenticated: boolean;
-  login: (user: User, tokens: AuthTokens) => void;
+  authStatus: AuthStatus;
+  login: (user: User, accessToken: string) => void;
   logout: () => void;
   updateUser: (user: User) => void;
-  // Partial: /auth/refresh returns only a new accessToken.
-  setTokens: (tokens: Partial<AuthTokens>) => void;
+  // /auth/refresh returns only a new access token (the refresh cookie is unchanged — non-rotating).
+  setAccessToken: (accessToken: string) => void;
+  setAuthStatus: (status: AuthStatus) => void;
 }
 
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set) => ({
+export const useAuthStore = create<AuthState>((set) => ({
+  user: null,
+  accessToken: null,
+  isAuthenticated: false,
+  authStatus: 'loading', // until useAuthBootstrap resolves the session
+
+  login: (user, accessToken) =>
+    set({ user, accessToken, isAuthenticated: true, authStatus: 'authenticated' }),
+
+  logout: () => {
+    set({
       user: null,
       accessToken: null,
-      refreshToken: null,
       isAuthenticated: false,
+      authStatus: 'unauthenticated',
+    });
+    // Drop all cached server state on logout so the next user can't briefly see the previous
+    // user's feed/posts (stale cache + privacy leak).
+    queryClient.clear();
+  },
 
-      login: (user, tokens) =>
-        set({
-          user,
-          accessToken: tokens.accessToken,
-          refreshToken: tokens.refreshToken,
-          isAuthenticated: true,
-        }),
+  updateUser: (user) => set({ user }),
 
-      logout: () => {
-        set({
-          user: null,
-          accessToken: null,
-          refreshToken: null,
-          isAuthenticated: false,
-        });
-        // Drop all cached server state on logout so the next user can't briefly
-        // see the previous user's feed/posts (stale cache + privacy leak).
-        queryClient.clear();
-      },
+  setAccessToken: (accessToken) => set({ accessToken }),
 
-      updateUser: (user) => set({ user }),
-
-      setTokens: (tokens) =>
-        set((state) => ({
-          accessToken: tokens.accessToken ?? state.accessToken,
-          refreshToken: tokens.refreshToken ?? state.refreshToken,
-        })),
-    }),
-    {
-      name: 'auth',
-      partialize: (state) => ({
-        user: state.user,
-        accessToken: state.accessToken,
-        refreshToken: state.refreshToken,
-        isAuthenticated: state.isAuthenticated,
-      }),
-    }
-  )
-);
+  setAuthStatus: (authStatus) => set({ authStatus }),
+}));

@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { commentsApi } from '@/api';
 import { queryKeys } from '@/lib/queryKeys';
+import { notifyError } from '@/lib/toast';
 import {
   patchPostInCaches,
   restorePostCaches,
@@ -65,10 +66,12 @@ export function useDeleteComment() {
       return { commentSnapshot, postSnapshot };
     },
 
-    onError: (_err, _vars, ctx) => {
-      if (!ctx) return;
-      restoreCommentCaches(qc, ctx.commentSnapshot);
-      restorePostCaches(qc, ctx.postSnapshot);
+    onError: (err, _vars, ctx) => {
+      if (ctx) {
+        restoreCommentCaches(qc, ctx.commentSnapshot);
+        restorePostCaches(qc, ctx.postSnapshot);
+      }
+      notifyError(err, "Couldn't delete comment");
     },
 
     onSuccess: (_data, { commentId, parentId }) => {

@@ -13,6 +13,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { authApi } from "@/api/auth";
 import { useAuthStore } from "@/stores/authStore";
 import { useComposerStore } from "@/stores/composerStore";
 import { useUnreadTotal } from "@/features/messaging/hooks/useUnreadTotal";
@@ -71,7 +72,13 @@ export default function Sidebar() {
   const badgeCount = (badge?: NavEntry["badge"]) =>
     badge === "messages" ? unreadMessages : badge === "notifications" ? unreadNotifications : 0;
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    // Clear the httpOnly refresh cookie server-side; clear client state regardless of the result.
+    try {
+      await authApi.logout();
+    } catch {
+      // ignore — still log out locally
+    }
     logout();
     navigate("/login", { replace: true });
   };

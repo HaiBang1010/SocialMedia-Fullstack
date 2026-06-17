@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import { ImagePlus, Loader2, Mic, Send, Smile, Trash2 } from "lucide-react";
+import { ImagePlus, Loader2, Mic, Send, Smile, Trash2, X } from "lucide-react";
+import { toast } from "sonner";
+import { replyAuthorName, replyPreviewLabel } from "@/lib/replyPreview";
 import { useSendMessage } from "@/features/messaging/hooks/useSendMessage";
 import { useTypingEmit } from "@/features/messaging/hooks/useTypingEmit";
 import { useVoiceRecorder } from "@/features/messaging/hooks/useVoiceRecorder";
@@ -15,10 +17,13 @@ import UnifiedMediaPicker from "./UnifiedMediaPicker";
 import { ACCEPT_ATTR } from "@/lib/image";
 import { formatDuration } from "@/lib/audio";
 import { isVideoFile } from "@/lib/video";
-import type { GiphyItem } from "@/types/api";
+import type { GiphyItem, ReplyPreview } from "@/types/api";
 
 interface MessageInputProps {
   conversationId: string;
+  // Phase Polish — reply target (lifted to ConversationDetail). null = not replying.
+  replyingTo: ReplyPreview | null;
+  onCancelReply: () => void;
 }
 
 const MAX_HEIGHT = 128; // px — textarea grows up to ~5 rows then scrolls
@@ -32,10 +37,13 @@ interface Selected {
   isVideo: boolean;
 }
 
-export default function MessageInput({ conversationId }: MessageInputProps) {
+export default function MessageInput({
+  conversationId,
+  replyingTo,
+  onCancelReply,
+}: MessageInputProps) {
   const [value, setValue] = useState("");
   const [selected, setSelected] = useState<Selected[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -45,18 +53,23 @@ export default function MessageInput({ conversationId }: MessageInputProps) {
 
   // Voice recording (Phase 5.4b). On stop, build a voice attachment + fire an optimistic send —
   // reuses the 5.4a pending-stash + useSendMessage pipeline.
-  const recorder = useVoiceRecorder(({ blob, duration }) => {
+  const recorder = useVoiceRecorder(({ blob, duration, mimeType }) => {
     const tempId = `temp-${crypto.randomUUID()}`;
-    setPendingAttachments(tempId, [prepareVoiceAttachment(blob, duration)]);
+    setPendingAttachments(tempId, [prepareVoiceAttachment(blob, duration, mimeType)]);
     mutate({ tempId });
   });
   const recording = recorder.state === "recording" || recorder.state === "requesting";
 
   useEffect(() => {
-    if (recorder.state === "denied") setError("Microphone access was denied.");
+    if (recorder.state === "denied") toast.error("Microphone access was denied.");
     else if (recorder.state === "unsupported")
-      setError("Voice recording isn't supported in this browser.");
+      toast.error("Voice recording isn't supported in this browser.");
   }, [recorder.state]);
+
+  // Focus the composer when a reply target is set, so the user can type immediately.
+  useEffect(() => {
+    if (replyingTo) taRef.current?.focus();
+  }, [replyingTo]);
 
   // Revoke any leftover preview URLs on unmount (latest set via a ref so the effect runs once).
   const selectedRef = useRef<Selected[]>([]);
@@ -78,7 +91,6 @@ export default function MessageInput({ conversationId }: MessageInputProps) {
     e.target.value = ""; // allow re-picking the same file
     if (picked.length === 0) return;
 
-    setError(null);
     const next: Selected[] = [];
     let rejected: string | null = null;
     for (const file of picked) {
@@ -98,12 +110,11 @@ export default function MessageInput({ conversationId }: MessageInputProps) {
         isVideo: isVideoFile(file),
       });
     }
-    if (rejected) setError(rejected);
+    if (rejected) toast.error(rejected);
     if (next.length) setSelected((prev) => [...prev, ...next]);
   };
 
   const removeSelected = (id: string) => {
-    setError(null); // user acted on the limit/validation warning → dismiss it
     setSelected((prev) => {
       const target = prev.find((s) => s.id === id);
       if (target) URL.revokeObjectURL(target.url);
@@ -126,27 +137,32 @@ export default function MessageInput({ conversationId }: MessageInputProps) {
         );
         setPendingAttachments(tempId, attachments);
       } catch {
-        setError("Could not prepare one of the attachments.");
+        toast.error("Could not prepare one of the attachments.");
         setPreparing(false);
         return;
       }
       setPreparing(false);
     }
 
-    mutate({ tempId, content: content || undefined });
+    // Phase Polish — text+media path carries the reply (E1: sticker/voice/emoji-standalone don't).
+    mutate({
+      tempId,
+      content: content || undefined,
+      replyToId: replyingTo?.id,
+      replyTo: replyingTo ?? undefined,
+    });
+    if (replyingTo) onCancelReply();
 
     // Clear the composer (the optimistic bubble now owns the preview).
     selected.forEach((s) => URL.revokeObjectURL(s.url));
     setSelected([]);
     setValue("");
-    setError(null);
     requestAnimationFrame(() => {
       if (taRef.current) taRef.current.style.height = "auto";
     });
   };
 
   const startRecording = () => {
-    setError(null);
     void recorder.start();
   };
 
@@ -203,6 +219,27 @@ export default function MessageInput({ conversationId }: MessageInputProps) {
 
   return (
     <form onSubmit={onSubmit} className="flex shrink-0 flex-col gap-2 border-t p-3">
+      {replyingTo && !recording && (
+        <div className="flex items-center gap-2 rounded-lg border-l-2 border-primary bg-muted/50 px-2.5 py-1.5">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium text-primary">
+              Replying to {replyAuthorName(replyingTo)}
+            </p>
+            <p className="truncate text-xs text-muted-foreground">
+              {replyPreviewLabel(replyingTo)}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onCancelReply}
+            aria-label="Cancel reply"
+            className="flex size-6 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      )}
+
       {!recording && selected.length > 0 && (
         <div className="scrollbar-hide flex gap-2 overflow-x-auto">
           {selected.map((s) => (
@@ -227,8 +264,6 @@ export default function MessageInput({ conversationId }: MessageInputProps) {
           ))}
         </div>
       )}
-
-      {error && <p className="px-1 text-xs text-destructive">{error}</p>}
 
       {recording ? (
         <div className="flex items-center gap-2">

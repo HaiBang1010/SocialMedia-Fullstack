@@ -16,7 +16,6 @@ import {
   validateVideoFile,
 } from '@/lib/video';
 import { runPool } from '@/lib/uploadPool';
-import { VOICE_MIME } from '@/lib/audio';
 import type { GiphyItem, MediaType, MessageMediaInput, PresignRequest } from '@/types/api';
 
 export type UploadStatus = 'uploading' | 'done' | 'failed';
@@ -85,13 +84,20 @@ export async function prepareAttachment(file: File): Promise<PreparedAttachment>
 }
 
 // Build a prepared VOICE attachment from a recorded clip (Phase 5.4b). No thumbnail/dimensions —
-// just the WebM blob + duration. previewUrl plays locally in the optimistic bubble (Q5).
-export function prepareVoiceAttachment(blob: Blob, duration: number): PreparedAttachment {
+// just the audio blob + duration. mimeType is the recorder's chosen container (Plan C: audio/webm
+// on Chrome/Firefox, audio/mp4 on iOS Safari) — it drives the presign contentType + S3 key ext.
+// previewUrl plays locally in the optimistic bubble (Q5).
+export function prepareVoiceAttachment(
+  blob: Blob,
+  duration: number,
+  mimeType: 'audio/webm' | 'audio/mp4',
+): PreparedAttachment {
+  const ext = mimeType === 'audio/mp4' ? 'm4a' : 'webm'; // cosmetic; server keys off contentType
   return {
     localId: `att-${crypto.randomUUID()}`,
     type: 'VOICE',
-    file: new File([blob], 'voice.webm', { type: VOICE_MIME }),
-    fileContentType: VOICE_MIME,
+    file: new File([blob], `voice.${ext}`, { type: mimeType }),
+    fileContentType: mimeType,
     duration,
     previewUrl: URL.createObjectURL(blob),
   };

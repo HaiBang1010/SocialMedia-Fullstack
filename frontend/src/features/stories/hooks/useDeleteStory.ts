@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { storiesApi } from '@/api';
 import { queryKeys } from '@/lib/queryKeys';
+import { notifyError } from '@/lib/toast';
 import {
   removeStoryFromCaches,
   restoreStoryCaches,
@@ -32,8 +33,9 @@ export function useDeleteStory() {
       return snapshot;
     },
 
-    onError: (_err, _vars, snapshot) => {
+    onError: (err, _vars, snapshot) => {
       if (snapshot) restoreStoryCaches(qc, snapshot);
+      notifyError(err, "Couldn't delete story");
     },
   });
 

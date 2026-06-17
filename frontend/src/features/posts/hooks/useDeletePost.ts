@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { postsApi } from '@/api';
 import { queryKeys } from '@/lib/queryKeys';
+import { notifyError } from '@/lib/toast';
 import {
   removePostFromLists,
   restorePostCaches,
@@ -37,8 +38,9 @@ export function useDeletePost() {
       return snapshot;
     },
 
-    onError: (_err, _vars, snapshot) => {
+    onError: (err, _vars, snapshot) => {
       if (snapshot) restorePostCaches(qc, snapshot);
+      notifyError(err, "Couldn't delete post");
     },
 
     onSuccess: (_data, { postId, authorUsername }) => {

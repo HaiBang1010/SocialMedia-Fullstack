@@ -32,6 +32,17 @@ export const messageInclude = {
       initiator: { select: publicUserSelect },
     },
   },
+  // Phase Polish — NARROW reply preview (select, NOT include): author + a content label for the
+  // quote bubble, without recursing the reply chain or pulling the original's media/reactions.
+  replyTo: {
+    select: {
+      id: true,
+      contentType: true,
+      content: true,
+      deletedAt: true,
+      sender: { select: publicUserSelect },
+    },
+  },
 } satisfies Prisma.MessageInclude;
 
 export type MessageRow = Prisma.MessageGetPayload<{ include: typeof messageInclude }>;
@@ -101,6 +112,19 @@ export function serializeMessage(message: MessageRow) {
             endedAt: message.call.endedAt ? message.call.endedAt.toISOString() : null,
             endedReason: message.call.endedReason,
             initiator: message.call.initiator,
+          },
+    // Phase Polish — quote preview of the replied-to message. null for non-replies, for a recalled
+    // message (tombstone shows no quote), or a deleted original (FK SetNull). content is cleared
+    // when the original itself was recalled — recalled text never reaches the client.
+    replyTo:
+      recalled || !message.replyTo
+        ? null
+        : {
+            id: message.replyTo.id,
+            contentType: message.replyTo.contentType,
+            content: message.replyTo.deletedAt ? null : message.replyTo.content,
+            deletedAt: message.replyTo.deletedAt ? message.replyTo.deletedAt.toISOString() : null,
+            sender: message.replyTo.sender,
           },
   };
 }
@@ -176,6 +200,19 @@ export async function sendMessage(
     await getViewablePost(input.sharedPostId, senderId);
   }
 
+  // Phase Polish — a reply must target a message in THIS conversation. 400 (not 404) for both
+  // "missing" and "cross-conversation", so we never leak whether a message exists elsewhere (E2).
+  // A recalled original is allowed (the quote then renders "Message deleted").
+  if (input.replyToId) {
+    const target = await prisma.message.findUnique({
+      where: { id: input.replyToId },
+      select: { conversationId: true },
+    });
+    if (!target || target.conversationId !== conversationId) {
+      throw new AppError(400, 'InvalidReplyTarget', 'Cannot reply to that message');
+    }
+  }
+
   // contentType is DERIVED here, never sent by the client (Phase 5.4a pattern, extended in 5.4c):
   // shared post → POST_SHARE; emoji-only text → EMOJI (jumbomoji); else by media composition.
   const contentType: MessageContentType = input.sharedPostId
@@ -201,6 +238,7 @@ export async function sendMessage(
       contentType,
       content: caption,
       sharedPostId: input.sharedPostId ?? null,
+      replyToId: input.replyToId ?? null,
       ...(media.length
         ? {
             media: {

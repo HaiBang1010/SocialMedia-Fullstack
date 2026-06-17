@@ -205,7 +205,7 @@ export function patchMessageDeleted(
           if (m.id !== messageId || m.deletedAt) return m;
           pageTouched = true;
           touched = true;
-          return { ...m, deletedAt, content: null, media: [], reactions: [], sharedPost: null };
+          return { ...m, deletedAt, content: null, media: [], reactions: [], sharedPost: null, replyTo: null };
         });
         return pageTouched ? { ...page, messages } : page;
       });

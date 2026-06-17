@@ -8,7 +8,8 @@ import type { RefreshResponse } from '@/types/api';
 
 const baseURL = import.meta.env.VITE_API_URL ?? 'http://localhost:3000';
 
-export const apiClient = axios.create({ baseURL });
+// withCredentials → the httpOnly refresh cookie is sent on /auth/* requests (Phase Polish).
+export const apiClient = axios.create({ baseURL, withCredentials: true });
 
 // Mark requests we've already retried after a refresh, to avoid loops.
 interface RetriableConfig extends InternalAxiosRequestConfig {
@@ -27,13 +28,15 @@ apiClient.interceptors.request.use((config) => {
 // Single in-flight refresh shared by all concurrent 401s.
 let refreshPromise: Promise<string> | null = null;
 
-async function runRefresh(refreshToken: string): Promise<string> {
-  // Bare axios (not apiClient) so this call skips the interceptors.
+async function runRefresh(): Promise<string> {
+  // Bare axios (not apiClient) so this call skips the interceptors — but WITH credentials so the
+  // httpOnly refresh cookie is sent. The token lives in the cookie now, not in the request body.
   const { data } = await axios.post<RefreshResponse>(
     `${baseURL}/auth/refresh`,
-    { refreshToken }
+    {},
+    { withCredentials: true }
   );
-  useAuthStore.getState().setTokens({ accessToken: data.accessToken });
+  useAuthStore.getState().setAccessToken(data.accessToken);
   return data.accessToken;
 }
 
@@ -54,16 +57,12 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    const refreshToken = useAuthStore.getState().refreshToken;
-    if (!refreshToken) {
-      useAuthStore.getState().logout();
-      return Promise.reject(error);
-    }
-
     original._retry = true;
 
     try {
-      refreshPromise = refreshPromise ?? runRefresh(refreshToken);
+      // Single-flight: all concurrent 401s share one refresh attempt. The httpOnly cookie is sent
+      // automatically (no token to read from the store anymore).
+      refreshPromise = refreshPromise ?? runRefresh();
       const newToken = await refreshPromise;
       original.headers.Authorization = `Bearer ${newToken}`;
       return apiClient(original as AxiosRequestConfig);

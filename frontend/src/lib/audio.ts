@@ -2,7 +2,26 @@
 // (Q3 HYBRID): deterministic bars from the message id, filled progressively by playback %.
 
 export const VOICE_MAX_DURATION = 300; // seconds (5 min, Q4)
-export const VOICE_MIME = 'audio/webm'; // MediaRecorder WebM/Opus (Q2)
+
+// Recording MIME candidates in preference order (Plan C). Chrome/Firefox support WebM/Opus
+// (smaller); iOS Safari supports ONLY audio/mp4 (AAC). We pick the first the browser can record.
+export const VOICE_MIME_CANDIDATES = [
+  'audio/webm;codecs=opus',
+  'audio/webm',
+  'audio/mp4',
+] as const;
+
+// First candidate this browser can record, or null if none (→ "unsupported" → toast).
+export function pickSupportedVoiceMime(): string | null {
+  if (typeof MediaRecorder === 'undefined') return null;
+  return VOICE_MIME_CANDIDATES.find((c) => MediaRecorder.isTypeSupported(c)) ?? null;
+}
+
+// Container MIME for the Blob type + presign contentType — strips any `;codecs=…` param, so
+// 'audio/webm;codecs=opus' → 'audio/webm'. Always one of the two presign-whitelisted audio MIMEs.
+export function baseVoiceMime(mime: string): 'audio/webm' | 'audio/mp4' {
+  return mime.split(';')[0] === 'audio/mp4' ? 'audio/mp4' : 'audio/webm';
+}
 
 // m:ss — shared by VoicePlayer (and reused by the video duration badge).
 export function formatDuration(seconds: number): string {

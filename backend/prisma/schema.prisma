@@ -263,7 +263,7 @@ model Message {
   senderId       String
   contentType    MessageContentType
   content        String?            @db.Text
-  replyToId      String? // reply-to-message reference (relation wired in Phase 5.5)
+  replyToId      String? // reply-to-message reference (FK relation `replyTo` wired in Phase Polish)
   sharedPostId   String? // shared-post reference (FK relation `sharedPost` wired in Phase 5.4c)
   callId         String? // Phase 6 — CALL entry reference (FK relation `call` below)
   deletedAt      DateTime? // soft-delete / recall marker (Phase 5.5)
@@ -275,8 +275,13 @@ model Message {
   media        MessageMedia[] // Phase 5.4a — image/video attachments (1..10, ordered)
   sharedPost   Post?         @relation("SharedPost", fields: [sharedPostId], references: [id], onDelete: SetNull) // Phase 5.4c — post-share preview; SetNull so the message survives a deleted post
   call         Call?         @relation(fields: [callId], references: [id], onDelete: SetNull) // Phase 6 — CALL entry; SetNull mirrors sharedPost
+  // Phase Polish — reply-to-message. SetNull so a reply survives the recalled/deleted original
+  // (the quote then renders "Message deleted"). NARROW preview only — never recurse the chain.
+  replyTo      Message?      @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies      Message[]     @relation("MessageReplies")
 
   @@index([conversationId, createdAt]) // message-list cursor (newest-first)
+  @@index([replyToId])
 }
 
 // Phase 5.4a — image/video attachments of a message (1..10 per message, mix allowed). One

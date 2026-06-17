@@ -11,7 +11,7 @@ Instagram-like social network — feed, stories, messaging, calls. Build to lear
 | Frontend | React 18 + Vite + TypeScript + Tailwind |
 | Backend | Node.js + Express + TypeScript |
 | Database | PostgreSQL 16 + Prisma ORM |
-| Auth | JWT (access + refresh tokens) |
+| Auth | JWT — access token in memory + refresh token in **httpOnly cookie** (Polish R1; was localStorage) |
 | API docs | Swagger UI + OpenAPI 3.1 (schema-first từ Zod) |
 | Storage | S3-compatible (MinIO local) — presigned upload |
 | Real-time | Socket.io (active từ Phase 5.2 — message:new, typing, presence, read receipts) |
@@ -64,7 +64,7 @@ social-media/
 cd backend
 npm install
 cp .env.example .env       # đổi 2 JWT_SECRET + GIPHY_API_KEY (5.4c) + LIVEKIT_URL/_API_KEY/_API_SECRET (calls, Phase 6)
-                           # Phase 7 KHÔNG cần env mới (default avatar = DiceBear URL hardcode)
+                           # Phase 7 + Polish R1 KHÔNG cần env mới (cookie auth dùng NODE_ENV + CORS_ORIGIN sẵn có)
 docker compose up -d        # khởi Postgres + MinIO
 npx prisma migrate dev      # apply migration
 npm run dev                 # → http://localhost:3000
@@ -100,6 +100,7 @@ npm run dev                 # → http://localhost:5173
 | 5.5 | Messaging: recall (soft-delete tombstone, 15-phút window) + group create UI (recent + mutual followers); reply-to + group member management → backlog | ✅ Xong |
 | 6 | Calls: audio + video, 1-1 + group, qua LiveKit Cloud (SFU). Call-as-Message trong thread + 4 REST + 3 socket events (call:incoming/declined/ended); webhook + screen-share → backlog | ✅ Xong |
 | 7 | Notifications (LIKE/COMMENT/FOLLOW) + unread badges + browser notif + sound + Postgres full-text search + default avatar (DiceBear toon-head); hide bài / block / push → backlog | ✅ Xong → **project 7/7 hoàn thành** |
+| Polish R1 | Toast system (sonner) + Safari iOS voice (`audio/mp4`) + reply-to-message FULL (quote bubble + scroll/jump) + httpOnly cookie auth (refresh cookie + access token in memory) | ✅ Xong |
 
 Chi tiết từng phase: xem `ARCHITECTURE.md`. Tiến độ chi tiết: xem `PROGRESS.md`.
 

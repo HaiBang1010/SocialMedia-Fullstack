@@ -26,6 +26,7 @@ const EXT_BY_MIME: Record<string, string> = {
   "image/avif": "avif",
   "video/mp4": "mp4",
   "audio/webm": "webm",
+  "audio/mp4": "m4a", // iOS Safari AAC voice recordings (Plan C)
 };
 
 /** Public URL to serve an object after upload (bucket is public-read in dev). */

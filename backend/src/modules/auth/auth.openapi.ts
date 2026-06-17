@@ -1,21 +1,21 @@
 import { z } from 'zod';
 import type { OpenAPIRegistry } from '@asteasolutions/zod-to-openapi';
-import { registerSchema, loginSchema, refreshSchema } from './auth.schema';
+import { registerSchema, loginSchema } from './auth.schema';
 import {
   errorResponseSchema,
   validationErrorResponseSchema,
   userPublicSchema,
 } from '../../lib/openapi';
 
-const authTokensSchema = z.object({
+// Phase Polish — login/register return { user, accessToken }; the refresh token is delivered as an
+// httpOnly Set-Cookie, not in the body.
+const authResponseSchema = z.object({
   user: userPublicSchema,
   accessToken: z.string(),
-  refreshToken: z.string(),
 });
 
 const refreshResponseSchema = z.object({ accessToken: z.string() });
 const meResponseSchema = z.object({ user: userPublicSchema });
-const logoutResponseSchema = z.object({ message: z.string() });
 
 const json = <T extends z.ZodTypeAny>(schema: T) => ({
   content: { 'application/json': { schema } },
@@ -43,7 +43,7 @@ export function registerAuthOpenApi(registry: OpenAPIRegistry) {
     summary: 'Create a new user account',
     request: { body: json(registerSchema) },
     responses: {
-      201: { description: 'Created', ...json(authTokensSchema) },
+      201: { description: 'Created (+ refreshToken httpOnly cookie)', ...json(authResponseSchema) },
       400: validationError400,
       409: conflict409,
     },
@@ -56,7 +56,7 @@ export function registerAuthOpenApi(registry: OpenAPIRegistry) {
     summary: 'Login with email or username',
     request: { body: json(loginSchema) },
     responses: {
-      200: { description: 'Login successful', ...json(authTokensSchema) },
+      200: { description: 'Login successful (+ refreshToken httpOnly cookie)', ...json(authResponseSchema) },
       400: validationError400,
       401: unauthorized401,
     },
@@ -66,11 +66,9 @@ export function registerAuthOpenApi(registry: OpenAPIRegistry) {
     method: 'post',
     path: '/auth/refresh',
     tags: ['Auth'],
-    summary: 'Exchange refresh token for a new access token',
-    request: { body: json(refreshSchema) },
+    summary: 'Exchange the refreshToken httpOnly cookie for a new access token',
     responses: {
       200: { description: 'New access token issued', ...json(refreshResponseSchema) },
-      400: validationError400,
       401: unauthorized401,
     },
   });
@@ -91,9 +89,9 @@ export function registerAuthOpenApi(registry: OpenAPIRegistry) {
     method: 'post',
     path: '/auth/logout',
     tags: ['Auth'],
-    summary: 'Logout placeholder (stateless JWT)',
+    summary: 'Clear the refreshToken httpOnly cookie',
     responses: {
-      200: { description: 'Logged out', ...json(logoutResponseSchema) },
+      204: { description: 'Logged out (refresh cookie cleared)' },
     },
   });
 }

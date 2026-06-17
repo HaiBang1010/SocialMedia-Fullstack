@@ -11,9 +11,20 @@
 
 (empty)
 
+## Phase Polish Round 1 — residual / follow-up (defer)
+
+> 4 item đã ship (Toast / Safari voice / Reply-to / httpOnly cookie — xem PROGRESS 2026-06-17 + entries `[x]` bên dưới). 6 mục dưới là phần defer/follow-up tách ra.
+
+- [P2] [frontend/messaging] **Cross-browser voice playback transcode** (Plan C residual) — Safari `<audio>` KHÔNG decode được `audio/webm`/Opus ⇒ voice note do Chrome user quay không play trên Safari (`play().catch` nuốt lỗi, bars đứng). Plan C chỉ fix *recording* trên Safari. Fix đầy đủ = server-side transcode về codec universal (vd AAC/mp4) khi nhận voice, hoặc lưu cả 2 format.
+- [P3] [backend/media] **mp3 voice support** (YAGNI) — `MediaRecorder` không bao giờ emit mp3 + không có existing mp3 usage. Chỉ thêm nếu sau này import file âm thanh ngoài.
+- [P3] [frontend/messaging] **Reply + sticker/voice/emoji-standalone** (Plan B scope E1) — reply-to hiện CHỈ wire ở text+media send path. Sticker/GIF/voice/emoji-standalone gửi qua handler riêng (KHÔNG mang `replyToId`). Wire reply cho các path đó nếu cần (BE đã accept `replyToId` orthogonal).
+- [P2] [backend/auth] **Refresh-token rotation + reuse detection** (Plan D) — hiện non-rotating (1 refresh token 7d, `/auth/refresh` không cấp mới). Nâng: rotate mỗi refresh + detect reuse (token cũ dùng lại → revoke family) cho security cao hơn. Cần lưu token family/jti (DB hoặc Redis).
+- [P3] [backend/auth] **Login dùng `publicUserSelect`** — `auth.service.login` trả full user (trừ passwordHash) ⇒ body có thêm `lastSeenAt`/`updatedAt` so với register (dùng `publicUserSelect`). Không leak passwordHash nhưng inconsistency (phát hiện lúc Plan D). Đồng bộ `login` dùng `publicUserSelect` như register.
+- [P2] [backend/auth] **CSRF token** — cookie auth (Polish R1) hiện mitigate CSRF bằng `sameSite:'lax'` + cookie path-scope `/auth` + refresh idempotent. Nếu sau cần state-changing endpoint dựa cookie hoặc cross-site thật (`sameSite:'none'`) → thêm CSRF token (double-submit / synchronizer).
+
 ## Phase 5.5 — Defer (đóng Phase 5; tách khỏi scope create+recall)
 
-- [ ] [backend+frontend/messaging] **Reply-to message** — `Message.replyToId` scalar đã có sẵn (5.1) nhưng CHƯA wire FK relation + UI quote-bubble + @-jump. Defer khỏi 5.5 (chỉ làm group create + recall).
+- [x] [backend+frontend/messaging] **Reply-to message** — ✅ **DONE Polish R1**: FK self-relation (migration `add_message_reply_to_relation`) + quote bubble + scroll/jump (older-page fetch cap 10) + desktop hover `↩` / mobile long-press action sheet. Residual: chỉ text+media path (xem Polish R1 residual).
 - [ ] [backend+frontend/messaging] **Group management** — add/remove/kick members, leave group, rename/đổi avatar group, admin transfer. 5.5 chỉ tạo group; quản lý sau (cần endpoints + Participant mutation + UI settings).
 - [ ] [backend/messages] **Orphan S3 cleanup cron** — recall xóa S3 best-effort (soft-fail); thêm sweep cron quét object mồ côi (khớp debt Posts/Stories "orphan check Phase polish"). Cũng gom: recall giữ lại `MessageMedia` rows (chỉ xóa S3) → hard-delete rows.
 - [ ] [frontend/messaging] **GroupCreateModal pagination** — hiện load toàn bộ recent+mutual không cursor (pool nhỏ chấp nhận). Cursor/virtualize khi user có nhiều follow.
@@ -23,7 +34,7 @@
 - [ ] [backend/lib/jwt] Tách error types: TokenExpired vs WrongTokenType vs InvalidSignature. Hiện gộp chung message → khó debug khi user báo lỗi.
 - [ ] [backend/middleware/error] Thêm pino logger thay console.log.
 - [ ] [backend/modules/users] userPublicSchema (Zod) duplicate với publicUserSelect (Prisma). Sửa field phải đồng bộ 2 chỗ. Cân nhắc generate Zod từ Prisma (prisma-zod-generator) khi schema lớn hơn.
-- [ ] [frontend/auth] Token lưu localStorage (authStore persist) → XSS đọc được. Phase polish: chuyển refresh token sang httpOnly cookie. Phase 1 chấp nhận trade-off.
+- [x] [frontend/auth] Token lưu localStorage → XSS đọc được — ✅ **DONE Polish R1**: refresh token → httpOnly cookie, access token in-memory (bỏ persist), `authStatus` boot-gate. Residual: refresh rotation + CSRF (xem Polish R1 residual).
 - [P2] [backend/follows] Follow approval flow cho private accounts. 
   Hiện tại: ai follow cũng instant approve (không có Follow.status enum). 
   Phase polish: thêm enum PENDING/ACCEPTED + endpoints accept/reject + 
@@ -92,12 +103,10 @@
 - Distinguish network vs validation errors for retry button visibility
 - Multi-message retry batch (currently per-message only)
 - Seen behavior toggle (IG default vs hide-on-reply) settings
-- [P2] [frontend/app-wide] Toast notification system thay inline error text — UX nhất quán cho
-      mọi error/success toàn app (hiện mỗi nơi tự render inline text + tự-dismiss timeout/manual).
-      Library candidate: **sonner** (shadcn-compat) hoặc react-hot-toast. Files affected:
-      MessageInput (attach limit/validate errors), StoryComposer (upload error), useReactToMessage
-      (error), upload errors (useCreateStory/useCreatePost), auth errors (login/register).
-      Ref: https://sonner.emilkowal.ski/
+- [x] [frontend/app-wide] Toast notification system — ✅ **DONE Polish R1**: **sonner** (`App.tsx`
+      mount + `lib/toast.ts` `notifyError`/`notifySuccess`). MessageInput/useReactToMessage/Tier-2
+      mutations → toast; auth **hybrid** (inline 401+field, toast network/500). Anti-spam: mutation/
+      user-action only (KHÔNG query onError). StoryComposer/PostComposer GIỮ retry-screen (không toast).
 
 [Phase 5.3]:
 - Typing in conversation list view ("typing..." subtitle indicator)
@@ -115,9 +124,9 @@
       nâng ceiling hoặc dùng `url` gốc cho single-image grid cell.
 
 [Phase 5.4b — voice messages, defer]:
-- [P2] [frontend/messaging] Safari/iOS voice: MediaRecorder KHÔNG hỗ trợ `audio/webm` (chỉ
-      `audio/mp4`) → hiện báo "not supported". Thêm `audio/mp4` (presign enum + `EXT_BY_MIME` +
-      recorder pick `isTypeSupported` ưu tiên webm fallback mp4) để Safari ghi âm được.
+- [x] [frontend/messaging] Safari/iOS voice (`audio/mp4`) — ✅ **DONE Polish R1**: dynamic-MIME
+      recorder (`pickSupportedVoiceMime` webm→mp4) + presign enum +`audio/mp4` + `EXT_BY_MIME` m4a +
+      `MAX_VOICE_BYTES` 5→10MB. Residual: cross-browser playback transcode (xem Polish R1 residual).
 - [P3] [frontend/messaging] Pause/resume recording + real waveform (decode audio buffer) +
       trim/preview-before-send (hiện tap stop = auto-send ngay, KHÔNG nghe lại trước khi gửi).
 

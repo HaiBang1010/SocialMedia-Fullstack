@@ -6,6 +6,7 @@ import { Loader2 } from 'lucide-react';
 import { authApi } from '@/api/auth';
 import { useAuthStore } from '@/stores/authStore';
 import { applyFieldErrors, getApiError, getStatus } from '@/lib/apiError';
+import { notifyError } from '@/lib/toast';
 import { registerSchema, type RegisterValues } from '@/lib/validations/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -38,10 +39,8 @@ export default function RegisterPage() {
   const mutation = useMutation({
     mutationFn: authApi.register,
     onSuccess: (res) => {
-      login(res.user, {
-        accessToken: res.accessToken,
-        refreshToken: res.refreshToken,
-      });
+      // Refresh token is now an httpOnly cookie (set by the server); body carries user + accessToken.
+      login(res.user, res.accessToken);
       navigate('/', { replace: true });
     },
     onError: (err) => {
@@ -62,9 +61,8 @@ export default function RegisterPage() {
         return;
       }
 
-      form.setError('root', {
-        message: 'Something went wrong. Please try again.',
-      });
+      // Network / 500 → toast (field + 409 conflicts stay inline above).
+      notifyError(err, 'Something went wrong. Please try again.');
     },
   });
 

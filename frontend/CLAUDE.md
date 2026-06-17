@@ -62,10 +62,12 @@ frontend/src/
 - ✅ `useQuery({ queryKey: ['posts'], queryFn: api.posts.list })`
 - Mutations qua `useMutation`, invalidate queries sau success
 
-### Auth state
-- Zustand store `authStore` lưu: user, accessToken, refreshToken, isAuthenticated
-- Token persist qua `localStorage` (Phase 1 — biết là không tối ưu security, sẽ refactor sang httpOnly cookie ở Phase polish)
-- Axios interceptor tự gắn `Authorization` header + retry với refresh khi 401
+### Auth state (Polish R1 — httpOnly cookie)
+- Zustand store `authStore` lưu: `user`, `accessToken`, `isAuthenticated`, `authStatus` — **MEMORY-ONLY, KHÔNG persist** (bỏ `persist` middleware + field `refreshToken`). Refresh token sống trong **httpOnly cookie** (server-set), JS không đọc được.
+- `authStatus: 'loading' | 'authenticated' | 'unauthenticated'` (init `'loading'`). `useAuthBootstrap` (App.tsx) on-mount: `POST /auth/refresh` (cookie) → `setAccessToken` → `GET /auth/me` → `login(user, token)` (authenticated); fail → unauthenticated. `didBoot` ref chống StrictMode double-fire.
+- `ProtectedRoute`/`PublicOnlyRoute` gate `authStatus` — `'loading'` → `<Spinner>` (KHÔNG redirect), tránh nháy /login lúc boot.
+- `apiClient` `withCredentials:true`; interceptor 401 → single-flight `runRefresh()` (cookie) → retry / logout. `Sidebar` logout = `authApi.logout()` (clear cookie) → `store.logout()`.
+- `login(user, accessToken)` (KHÔNG còn tokens object). `isAuthenticated` giữ lại (derived) cho `useSocketConnection`.
 
 ### Routing
 - Protected routes wrap qua `<ProtectedRoute>` component
@@ -401,3 +403,10 @@ Nút "+" (`SquarePen`) ở header `ConversationList` → modal tạo group; "...
 - **CallEntry call-back click → REVERTED (round 4)**: user KHÔNG muốn click CallEntry start call. `CallEntry` = **display-only `<div>`** (icon + label, no onClick/cursor/disabled/useStartCall). Call initiate CHỈ qua header `CallButtons`. Gỡ luôn `conversationType` threading (MessageThread→BurstGroup→MessageBubble→CallEntry) vốn chỉ phục vụ call-back — MessageThread GIỮ `conversationType` (seenInfo dùng).
 - **Presence dot**: thêm `Avatar online` cho **MessageThread BurstGroup** (`usePresenceStore(s=>!!s.online[burst.senderId])` per-user selector → scoped re-render; self không avatar) + **IncomingCallDialog** initiator. (ConversationListItem + ConversationDetail header đã có từ 5.2.) Contact-scoped presence cover group members.
 - **Block reactions trên CALL** (display-only events): `MessageBubble.canReact = !temp && !isCall` (1 gate ẩn long-press + hover SmilePlus + ReactionChips; RecallMenu gate `canReact && isOwn`). BE defense `assertCanReact` (react+unreact dùng chung): `contentType==='CALL'` → 400 CannotReactToCall.
+
+## Phase Polish Round 1 — DONE
+
+- **A — Toast (sonner)**: `npm i sonner`. `<Toaster position="top-right" theme={theme} richColors closeButton>` ở **`App.tsx`** (NGOÀI AuthLayout + AppLayout — login network error mới hiện). `lib/toast.ts`: `notifyError(err, fallback)` (reuse `getApiError`) + `notifySuccess`. Thay inline → toast ở MessageInput (gỡ state `error`), useReactToMessage, Tier-2 mutation onError (delete/update post/comment/story + follow), success create post/story. Login/Register **hybrid** (giữ inline 401 + field 400/409; chỉ network/500 → toast). **Anti-spam**: toast CHỈ ở mutation/user-action, KHÔNG ở query `onError`/`refetchInterval`.
+- **B — Reply-to UI**: `types/api.ts` `ReplyPreview` + `Message.replyTo`. `lib/replyPreview.ts` (`replyPreviewLabel` [CALL→"Call", media→"[Photo]"/..., deleted→"Message deleted"], `replyAuthorName`, `toReplyPreview`). State `replyingTo` **lift lên `ConversationDetail`** (Thread + Input là sibling). `MessageInput` "Replying to X" preview + cancel; send mang `replyToId` + optimistic `replyTo` (CHỈ text+media path — E1). `MessageThread`: `data-message-id` + `scrollToMessage` (querySelector + `reply-flash` 1.5s; older-page chưa load → `fetchNextPage` loop **cap 10** → toast "Message not available"; `loadingOlder` flag trước jump-fetch để layout effect không giật). `MessageBubble`: quote bubble (click → onJumpTo) + **menu state-machine `null|actions|picker`** (1 Popover, tránh dual-anchor race) — desktop hover `↩`/`😊`/`⋯`, mobile long-press → `MessageActionMenu` (Reply/React/Delete). `useRecallFlow` (DRY recall confirm, dialog ở bubble level — sống ngoài transient popover; `RecallMenu` thành dumb trigger props `withinWindow`/`onDelete`). `messageCache.patchMessageDeleted` clear `replyTo`. `index.css` `@keyframes reply-flash` (`color-mix` theme-aware).
+- **C — Safari voice (`audio/mp4`)**: `lib/audio.ts` `VOICE_MIME_CANDIDATES` + `pickSupportedVoiceMime()` + `baseVoiceMime()` (gỡ const `VOICE_MIME`). `useVoiceRecorder` chọn mime động (webm ưu tiên, mp4 fallback Safari) + `VoiceResult.mimeType`. `mediaUpload.prepareVoiceAttachment(blob, duration, mimeType)`. Chrome/FF vẫn webm (zero regression). `PresignRequest.contentType` +`'audio/mp4'`.
+- **D — httpOnly cookie**: xem "Auth state" trên.

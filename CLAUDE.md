@@ -100,8 +100,9 @@ Mỗi sub-folder có CLAUDE.md riêng — đọc khi làm việc trong folder đ
 | 5.5 Messaging recall (soft-delete tombstone, sender ≤15min → 410, S3 soft-fail cleanup, socket `message:deleted`) + Group create UI (`GET /users/groupable` recent+mutual merge, multi-select modal, name auto-derive); reply-to + group member management → BACKLOG | ✅ Xong → **Phase 5 hoàn thành** |
 | 6. Calls (Audio+Video 1-1 + group, LiveKit Cloud SFU; Call-as-Message; 4 REST + 3 socket events; webhook defer) | ✅ Xong (browser-verified + follow-up fixes; `ringtone.mp3` optional — graceful fallback; webhook/screen-share → BACKLOG) |
 | 7. Polish — Notifications (LIKE/COMMENT/FOLLOW + 1h dedupe + socket `notification:new`) + unread badges (per-conv + total, `$queryRaw`) + Postgres full-text search (tsvector + GIN, prefix `to_tsquery`) + default avatar (DiceBear toon-head + backfill) + sound/browser-notif; OpenAPI 41→47 | ✅ Xong → **project 7/7 COMPLETE** (hide bài/block/MENTION+STORY_VIEW notif/push/settings → BACKLOG) |
+| Polish R1 — Toast (sonner, `App.tsx` mount + `lib/toast.ts`, anti-spam mutation-only) + Safari iOS voice (`audio/mp4` presign + dynamic-MIME recorder, `MAX_VOICE_BYTES` 5→10MB) + Reply-to FULL (FK self-relation migration `add_message_reply_to_relation` + quote bubble + scroll/jump + long-press action sheet) + httpOnly cookie auth (refresh cookie + access token in-memory, `authStatus` boot-gate) | ✅ Xong (D browser-verify do user) |
 
-Project đã hoàn thành 7/7 phase. Task mới ngoài scope đã làm — hỏi user trước khi mở rộng.
+Project đã hoàn thành 7/7 phase + **Polish Round 1** (Toast / Safari voice / Reply-to / httpOnly cookie auth). Task mới ngoài scope đã làm — hỏi user trước khi mở rộng.
 
 ## Ngữ cảnh sâu hơn
 
