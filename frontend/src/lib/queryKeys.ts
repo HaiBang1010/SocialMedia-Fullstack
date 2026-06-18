@@ -23,6 +23,9 @@ export const queryKeys = {
   // Users addable to a new group (GET /users/groupable), keyed by search query (Phase 5.5).
   groupableUsers: (q: string) => ['users', 'groupable', q] as const,
 
+  // Suggested accounts to follow (GET /users/suggested).
+  suggestedUsers: () => ['users', 'suggested'] as const,
+
   // Personalized feed (GET /feed).
   feed: () => ['feed'] as const,
 

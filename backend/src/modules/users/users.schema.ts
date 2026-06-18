@@ -21,6 +21,16 @@ export const groupableQuerySchema = z.object({
 export type GroupableQueryInput = z.infer<typeof groupableQuerySchema>;
 
 /**
+ * Query for GET /users/suggested — a result cap (default 10). Mixed algorithm: friends-of-friends
+ * for users who already follow people, popular-users fallback for new users.
+ */
+export const suggestedQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(20).default(10),
+});
+
+export type SuggestedQueryInput = z.infer<typeof suggestedQuerySchema>;
+
+/**
  * One entry of GET /users/groupable — the 7 public fields plus a `source` flag telling the UI
  * whether the suggestion came from a recent conversation or a mutual-follow relationship.
  */

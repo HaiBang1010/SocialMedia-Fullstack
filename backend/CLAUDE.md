@@ -109,6 +109,7 @@ router.post('/x', validate(xSchema), asyncHandler(async (req, res) => {
 | GET | `/auth/me` | ✓ | user hiện tại |
 | POST | `/auth/logout` | - | clearCookie refreshToken → **204** (Polish R1; was 200 placeholder) |
 | GET | `/users/groupable` | ✓ | users addable to a new group — recent conversation partners + mutual followers, merged (recent first, mutual alphabetical), deduped, self excluded; `?q=` partial username/name, `?limit=` ≤50 → bare `GroupableUser[]` (publicUser + `source`) (Phase 5.5) |
+| GET | `/users/suggested` | ✓ | suggested accounts to follow (Polish R2) — FoF (`follow.groupBy` ranked) + popular fallback (`orderBy followers _count`), exclude self+already-followed, fill popular khi FoF < limit; `?limit=` ≤20 default 10 → `{ users: PublicUser[] }`. Đặt **TRƯỚC `/:username`** |
 | GET | `/users/:username` | optional | profile public + counts (posts/followers/following) + isFollowing |
 | GET | `/users/:username/posts` | optional | list post của user (cursor pagination) |
 | PATCH | `/users/me` | ✓ | sửa profile |
@@ -128,7 +129,7 @@ router.post('/x', validate(xSchema), asyncHandler(async (req, res) => {
 | DELETE | `/users/:username/follow` | ✓ | unfollow user (idempotent) |
 | GET | `/users/:username/followers` | optional | list followers (cursor) |
 | GET | `/users/:username/following` | optional | list following (cursor) |
-| GET | `/feed` | ✓ | personalized feed (following users, 14 ngày, cursor) |
+| GET | `/feed` | ✓ | **mixed feed** (Polish R2) — followed posts (keyset cursor `f:<id>`) + ranked stranger PUBLIC posts fill remainder (in-memory pool cap 100: FoF→engagement→recency, cursor `s:<offset>`); window **90 ngày** (14→90); `isFollowingAuthor` true=followed/false=stranger (reuse field, no DTO change) |
 | POST | `/stories` | ✓ | tạo story (1 image hoặc video, expiresAt = now+24h; + overlay `items[]` TEXT/EMOJI 4.3a) |
 | GET | `/stories/feed` | ✓ | active stories của following users, grouped by author + `hasUnseenStory` |
 | POST | `/stories/:id/view` | ✓ | mark story viewed (upsert idempotent; **self-view skip** — owner xem own story KHÔNG ghi) → 204 |
@@ -203,6 +204,8 @@ Khi thêm endpoint mới, update bảng trên.
 > **Phase 6 follow-up round 4 (block react CALL)**: `assertCanReact` (dùng chung reactToMessage + removeReaction) select +`contentType`; sau participant-403 → `contentType==='CALL'` → **400 CannotReactToCall** (mirror recall CALL block, defense-in-depth; FE cũng ẩn reaction UI). CallEntry call-back click reverted → display-only (FE-only).
 
 > **Polish Round 1 (4 items)**: **(B) Reply-to** — migration **`add_message_reply_to_relation`** (self-relation `Message.replyTo`/`replies` `onDelete:SetNull` + `@@index([replyToId])`; cột `replyToId` đã có 5.1 ⇒ additive). `messageInclude.replyTo` **select narrow** (id/contentType/content/deletedAt/sender — KHÔNG đệ quy/media/reactions) + `serializeMessage.replyTo` (recalled→null; original-recalled→content null, không leak). **TYPE-PARITY lesson #6**: `conversationInclude.messages.include.replyTo` y hệt (serializeMessage dùng chung). `sendMessage` validate `replyToId` same-conversation → **400 InvalidReplyTarget** (missing OR cross-conv, không leak existence). `replyPreviewResponseSchema` DEDICATED (KHÔNG ref messageResponseSchema → tránh OpenAPI self-recursion). **(C) Safari voice** — presign enum +`audio/mp4`, `AUDIO_CONTENT_TYPES` +`audio/mp4`, `EXT_BY_MIME["audio/mp4"]="m4a"`, `MAX_VOICE_BYTES` **5→10MB** (AAC nặng hơn Opus); VOICE derive theo `MediaType` (MIME-agnostic, không đổi). **(D) httpOnly cookie** — xem "Auth flow" trên. **(A) Toast** = FE-only. OpenAPI vẫn **47 paths** (chỉ widen schema). **⚠️ Migration gotcha**: `prisma migrate dev` MỚI khi `searchVector` (GENERATED tsvector Phase 7) còn tồn tại sẽ emit drift giả (`DROP DEFAULT` trên generated column → 42601) → workaround: `--create-only` + hand-strip 4 câu searchVector + `migrate deploy` (KHÔNG re-diff shadow-DB).
+
+> **Polish Round 2 (avatar + suggested + mixed feed)**: **KHÔNG migration** (no schema change). **Avatar** — `updateProfile` (users.service): `avatarUrl === ''` → **regenerate DiceBear** (`generateAvatarUrl(username)`, fetch username) thay vì null; schema/presign sẵn (image MIME, FE cap 5MB). **Suggested** — `getSuggestedUsers(userId, {limit})`: 0-follow → popular (`orderBy: { followers: { _count: 'desc' } }`); else FoF (`follow.groupBy by followingId` ranked by mutual-count) + fill popular; exclude self+followed. `GET /users/suggested` đặt TRƯỚC `/:username` (như `/groupable`). OpenAPI 47→48. **Mixed feed** — `getFeed` rewrite: **phase-cursor** `f:<postId>` (followed keyset) → khi followed exhausted, fill **ranked strangers** (`s:<offset>`); `rankedStrangers` = in-memory sort trên pool (`take STRANGER_POOL_CAP=100`, PUBLIC only, `notIn [self, ...following]`) theo **FoF → (likes+comments) → createdAt**; `FEED_DAYS` 14→**90**. **Reuse `isFollowingAuthor`** (true followed / false stranger) — KHÔNG field/DTO/OpenAPI mới, reuse `postInclude`+`serializePost` (type-parity tự động, **no raw SQL**). PRIVATE/stranger-FOLLOWERS không bao giờ fetch (PUBLIC-only stranger query).
 
 ## Khi thêm feature mới
 

@@ -22,6 +22,16 @@
 - [P3] [backend/auth] **Login dùng `publicUserSelect`** — `auth.service.login` trả full user (trừ passwordHash) ⇒ body có thêm `lastSeenAt`/`updatedAt` so với register (dùng `publicUserSelect`). Không leak passwordHash nhưng inconsistency (phát hiện lúc Plan D). Đồng bộ `login` dùng `publicUserSelect` như register.
 - [P2] [backend/auth] **CSRF token** — cookie auth (Polish R1) hiện mitigate CSRF bằng `sameSite:'lax'` + cookie path-scope `/auth` + refresh idempotent. Nếu sau cần state-changing endpoint dựa cookie hoặc cross-site thật (`sameSite:'none'`) → thêm CSRF token (double-submit / synchronizer).
 
+## Phase Polish Round 2 — residual / follow-up (defer)
+
+> Avatar upload + suggested follows + mixed feed đã ship (PROGRESS 2026-06-18).
+
+- [P2] [backend/media] **Avatar orphan MinIO cleanup** — replace avatar / reset-to-DiceBear bỏ object cũ trên MinIO (gom với orphan-sweep debt Posts/Stories/Messages sẵn có).
+- [P3] [backend/feed] **Stranger ranking beyond pool cap** — mixed feed rank in-memory trên pool `STRANGER_POOL_CAP=100`; sâu hơn 100 stranger thì hết (nextCursor null). Nâng = materialized engagement score / keyset ranking nếu cần scale.
+- [P3] [backend/feed] **FoF global-popularity tiebreak** — FoF strangers rank theo mutual-count desc; chưa tiebreak theo global follower-count (suggested cũng vậy).
+- [P3] [frontend/feed] **Mixed-feed reclassification on follow** — follow stranger in-feed chỉ patch `isFollowingAuthor` (ẩn nút), post giữ nguyên vị trí session này; reclassify sang followed-stream ở next natural load (KHÔNG invalidate feed để giữ scroll — chủ đích).
+- [P3] [frontend/discovery] **`/explore` page + "See all"** — RightRail/suggested chưa có trang explore riêng; "See all" link defer.
+
 ## Phase 5.5 — Defer (đóng Phase 5; tách khỏi scope create+recall)
 
 - [x] [backend+frontend/messaging] **Reply-to message** — ✅ **DONE Polish R1**: FK self-relation (migration `add_message_reply_to_relation`) + quote bubble + scroll/jump (older-page fetch cap 10) + desktop hover `↩` / mobile long-press action sheet. Residual: chỉ text+media path (xem Polish R1 residual).

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { OpenAPIRegistry } from '@asteasolutions/zod-to-openapi';
-import { updateProfileSchema, userProfileSchema, groupableQuerySchema, groupableUserSchema } from './users.schema';
+import { updateProfileSchema, userProfileSchema, groupableQuerySchema, groupableUserSchema, suggestedQuerySchema } from './users.schema';
 import {
   errorResponseSchema,
   validationErrorResponseSchema,
@@ -58,6 +58,20 @@ export function registerUsersOpenApi(registry: OpenAPIRegistry) {
     request: { query: groupableQuerySchema },
     responses: {
       200: { description: 'Groupable users', ...json(z.array(GroupableUser)) },
+      401: unauthorized401,
+    },
+  });
+
+  // GET /users/suggested — suggested accounts to follow (FoF + popular fallback).
+  registry.registerPath({
+    method: 'get',
+    path: '/users/suggested',
+    tags: ['Users'],
+    summary: 'List suggested accounts to follow (friends-of-friends, popular fallback)',
+    security: [{ bearerAuth: [] }],
+    request: { query: suggestedQuerySchema },
+    responses: {
+      200: { description: 'Suggested users', ...json(z.object({ users: z.array(userPublicSchema) })) },
       401: unauthorized401,
     },
   });

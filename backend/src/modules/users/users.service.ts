@@ -2,7 +2,8 @@ import { Prisma, PostVisibility } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/error';
 import { isFollowing } from '../follows/follows.service';
-import type { UpdateProfileInput, GroupableQueryInput } from './users.schema';
+import { generateAvatarUrl } from '../../lib/avatar';
+import type { UpdateProfileInput, GroupableQueryInput, SuggestedQueryInput } from './users.schema';
 
 // Exported để các module khác (vd posts) reuse cho phần `author` —
 // đảm bảo KHÔNG bao giờ lộ email/passwordHash.
@@ -154,13 +155,78 @@ export async function getGroupableUsers(meId: string, { q, limit }: GroupableQue
   return filtered.slice(0, limit);
 }
 
+/**
+ * Suggested users to follow (mixed algorithm). New users (follow nobody) → popular users by
+ * follower count. Existing users → friends-of-friends (people followed by the accounts I follow),
+ * ranked by how many of my followings follow them; topped up with popular users if FoF < limit.
+ * Always excludes self + accounts I already follow, so every result is a fresh "Follow" target.
+ */
+export async function getSuggestedUsers(userId: string, { limit }: SuggestedQueryInput) {
+  const following = await prisma.follow.findMany({
+    where: { followerId: userId },
+    select: { followingId: true },
+  });
+  const myFollowing = following.map((f) => f.followingId);
+
+  // New user — no follows yet → most-followed accounts (relation count, no denormalized column).
+  if (myFollowing.length === 0) {
+    return prisma.user.findMany({
+      where: { id: { not: userId } },
+      orderBy: { followers: { _count: 'desc' } },
+      take: limit,
+      select: publicUserSelect,
+    });
+  }
+
+  // Friends-of-friends: accounts followed by the people I follow, excluding me + who I already
+  // follow, ranked by how many of my followings follow them.
+  const fofGroups = await prisma.follow.groupBy({
+    by: ['followingId'],
+    where: {
+      followerId: { in: myFollowing },
+      followingId: { notIn: [userId, ...myFollowing] },
+    },
+    _count: { followingId: true },
+    orderBy: { _count: { followingId: 'desc' } },
+    take: limit,
+  });
+  const fofIds = fofGroups.map((g) => g.followingId);
+
+  const fofUsers = fofIds.length
+    ? await prisma.user.findMany({ where: { id: { in: fofIds } }, select: publicUserSelect })
+    : [];
+  // Reorder to the FoF ranking (findMany doesn't preserve the `in` order).
+  const byId = new Map(fofUsers.map((u) => [u.id, u]));
+  const suggestions = fofIds.map((id) => byId.get(id)).filter((u): u is typeof fofUsers[number] => !!u);
+
+  // Top up with popular users if FoF didn't fill the limit (excluding everyone already chosen).
+  if (suggestions.length < limit) {
+    const fill = await prisma.user.findMany({
+      where: { id: { notIn: [userId, ...myFollowing, ...fofIds] } },
+      orderBy: { followers: { _count: 'desc' } },
+      take: limit - suggestions.length,
+      select: publicUserSelect,
+    });
+    suggestions.push(...fill);
+  }
+
+  return suggestions;
+}
+
 export async function updateProfile(userId: string, input: UpdateProfileInput) {
   // Loại bỏ các field undefined / empty string
   const data: any = {};
   if (input.name !== undefined) data.name = input.name;
   if (input.bio !== undefined) data.bio = input.bio;
   if (input.avatarUrl !== undefined) {
-    data.avatarUrl = input.avatarUrl === '' ? null : input.avatarUrl;
+    if (input.avatarUrl === '') {
+      // Reset to the deterministic DiceBear default (regenerate from username) instead of clearing
+      // to null — so a reset always shows a real avatar, never the bare initials fallback.
+      const u = await prisma.user.findUnique({ where: { id: userId }, select: { username: true } });
+      data.avatarUrl = u ? generateAvatarUrl(u.username) : null;
+    } else {
+      data.avatarUrl = input.avatarUrl;
+    }
   }
   if (input.isPrivate !== undefined) data.isPrivate = input.isPrivate;
 

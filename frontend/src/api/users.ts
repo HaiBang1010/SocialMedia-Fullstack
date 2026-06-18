@@ -1,5 +1,10 @@
 import { apiClient } from './client';
-import type { ProfileResponse, UserResponse, GroupableUser } from '@/types/api';
+import type {
+  ProfileResponse,
+  UserResponse,
+  GroupableUser,
+  SuggestedUsersResponse,
+} from '@/types/api';
 
 export interface UpdateProfileInput {
   name?: string;
@@ -25,6 +30,14 @@ export const usersApi = {
   getGroupable: async (q?: string, limit?: number): Promise<GroupableUser[]> => {
     const { data } = await apiClient.get<GroupableUser[]>('/users/groupable', {
       params: { q: q || undefined, limit },
+    });
+    return data;
+  },
+
+  // GET /users/suggested → suggested accounts to follow (friends-of-friends + popular fallback).
+  getSuggested: async (limit?: number): Promise<SuggestedUsersResponse> => {
+    const { data } = await apiClient.get<SuggestedUsersResponse>('/users/suggested', {
+      params: { limit },
     });
     return data;
   },

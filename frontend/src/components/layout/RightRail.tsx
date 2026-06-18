@@ -1,60 +1,42 @@
-// Static placeholders — real suggestions arrive in Phase 2.
-const SUGGESTIONS = [
-  { name: "Maya Chen", username: "mayac", reason: "Follows you" },
-  { name: "Leo Park", username: "leop", reason: "New to Beng" },
-  { name: "Ava Rossi", username: "avar", reason: "Suggested for you" },
-  { name: "Noah Kim", username: "noahk", reason: "Popular" },
-  { name: "Sara Diaz", username: "sarad", reason: "Suggested for you" },
-];
+import { useSuggestedUsers } from '@/features/users/hooks/useSuggestedUsers';
+import SuggestedUserCard from '@/components/users/SuggestedUserCard';
+import { Skeleton } from '@/components/ui/skeleton';
 
-const FOOTER_LINKS = ["About", "Help", "Privacy", "Terms", "Language"];
+const FOOTER_LINKS = ['About', 'Help', 'Privacy', 'Terms', 'Language'];
 
-function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? "")
-    .join("");
-}
-
+// Desktop right column (lg+). Real suggested accounts (top 5 of the shared suggested-users query)
+// + a static footer. Hidden on smaller screens; the empty-feed grid covers discovery there.
 export default function RightRail() {
+  const { data: users, isLoading } = useSuggestedUsers();
+  const top = users?.slice(0, 5) ?? [];
+
   return (
     <aside className="hidden w-72 shrink-0 border-l px-6 py-8 lg:block">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold text-muted-foreground">
-          Suggested for you
-        </span>
-        <button
-          type="button"
-          disabled
-          aria-disabled="true"
-          className="cursor-not-allowed text-xs font-medium opacity-60"
-        >
-          See all
-        </button>
-      </div>
+      <span className="text-sm font-semibold text-muted-foreground">Suggested for you</span>
 
-      <ul className="mt-4 flex flex-col gap-3">
-        {SUGGESTIONS.map((u) => (
-          <li key={u.username} className="flex items-center gap-3">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
-              {initials(u.name)}
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium">@{u.username}</div>
-              <div className="truncate text-xs text-muted-foreground">{u.reason}</div>
-            </div>
-            <button
-              type="button"
-              disabled
-              aria-disabled="true"
-              className="cursor-not-allowed text-xs font-semibold text-primary opacity-60"
-            >
-              Follow
-            </button>
-          </li>
-        ))}
-      </ul>
+      {isLoading ? (
+        <ul className="mt-4 flex flex-col gap-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <li key={i} className="flex items-center gap-3">
+              <Skeleton className="size-10 rounded-full" />
+              <div className="flex-1 space-y-1.5">
+                <Skeleton className="h-3 w-24" />
+                <Skeleton className="h-2.5 w-16" />
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : top.length === 0 ? (
+        <p className="mt-4 text-xs text-muted-foreground">No suggestions right now.</p>
+      ) : (
+        <ul className="mt-4 flex flex-col gap-3">
+          {top.map((u) => (
+            <li key={u.id}>
+              <SuggestedUserCard user={u} compact />
+            </li>
+          ))}
+        </ul>
+      )}
 
       <footer className="mt-8 flex flex-col gap-3 text-xs text-muted-foreground">
         <nav className="flex flex-wrap gap-x-2 gap-y-1">

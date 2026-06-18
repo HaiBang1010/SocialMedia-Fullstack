@@ -101,6 +101,45 @@ export function patchPostInCaches(
   );
 }
 
+// Like mapPostInInfinite but matches by AUTHOR id (a follow affects every post by that author).
+function mapPostsByAuthorInInfinite<T extends { posts: Post[] }>(
+  data: InfiniteData<T> | undefined,
+  authorId: string,
+  updater: PostUpdater,
+): InfiniteData<T> | undefined {
+  if (!data) return data;
+  let touched = false;
+  const pages = data.pages.map((page) => {
+    let pageTouched = false;
+    const posts = page.posts.map((p) => {
+      if (p.author.id !== authorId) return p;
+      const next = updater(p);
+      if (next === p) return p;
+      pageTouched = true;
+      touched = true;
+      return next;
+    });
+    return pageTouched ? { ...page, posts } : page;
+  });
+  return touched ? { ...data, pages } : data;
+}
+
+// Mark every cached post by `authorId` as followed (feed + userPosts lists). Used when you follow an
+// author inline from a stranger post's Follow button (mixed feed) — the button then hides without a
+// feed refetch (keeps scroll). Same-reference-when-unchanged so unaffected lists don't re-render.
+export function markAuthorFollowedInCaches(qc: QueryClient, authorId: string): void {
+  const setFollowed: PostUpdater = (p) =>
+    p.isFollowingAuthor ? p : { ...p, isFollowingAuthor: true };
+  qc.setQueriesData<InfiniteData<FeedResponse>>(
+    { queryKey: queryKeys.feed() },
+    (data) => mapPostsByAuthorInInfinite(data, authorId, setFollowed),
+  );
+  qc.setQueriesData<InfiniteData<PostListResponse>>(
+    { predicate: userPostsPredicate },
+    (data) => mapPostsByAuthorInInfinite(data, authorId, setFollowed),
+  );
+}
+
 // Snapshot of all three caches for a post, captured in onMutate so onError can
 // roll an optimistic update back verbatim.
 export interface PostCacheSnapshot {

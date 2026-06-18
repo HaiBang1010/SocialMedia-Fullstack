@@ -64,6 +64,12 @@ export interface UserResponse {
   user: User;
 }
 
+// GET /users/suggested — accounts to follow (friends-of-friends + popular fallback). All are
+// users the viewer does NOT already follow.
+export interface SuggestedUsersResponse {
+  users: PublicUser[];
+}
+
 // GET /users/:username — wraps the public profile DTO. Also `{ user }`, but the
 // user is a ProfileUser (counts + isFollowing), not the self User.
 export interface ProfileResponse {

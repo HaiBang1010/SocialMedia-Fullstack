@@ -101,6 +101,7 @@ npm run dev                 # → http://localhost:5173
 | 6 | Calls: audio + video, 1-1 + group, qua LiveKit Cloud (SFU). Call-as-Message trong thread + 4 REST + 3 socket events (call:incoming/declined/ended); webhook + screen-share → backlog | ✅ Xong |
 | 7 | Notifications (LIKE/COMMENT/FOLLOW) + unread badges + browser notif + sound + Postgres full-text search + default avatar (DiceBear toon-head); hide bài / block / push → backlog | ✅ Xong → **project 7/7 hoàn thành** |
 | Polish R1 | Toast system (sonner) + Safari iOS voice (`audio/mp4`) + reply-to-message FULL (quote bubble + scroll/jump) + httpOnly cookie auth (refresh cookie + access token in memory) | ✅ Xong |
+| Polish R2 | Avatar upload (crop + presign) + Suggested follows (`/users/suggested` FoF+popular) + **Mixed feed** (followed + ranked strangers fill, window 14→90) + onboarding gate + stranger inline-Follow | ✅ Xong |
 
 Chi tiết từng phase: xem `ARCHITECTURE.md`. Tiến độ chi tiết: xem `PROGRESS.md`.
 
@@ -126,7 +127,8 @@ Chi tiết từng phase: xem `ARCHITECTURE.md`. Tiến độ chi tiết: xem `PR
 | GET | `/posts/:id/comments` | optional | list **ROOT** comment + `repliesCount` (cursor) |
 | GET | `/comments/:id/replies` | optional | list replies của 1 comment (chronological, cursor) |
 | PATCH · DELETE | `/comments/:id` | ✓ | sửa / xóa comment (chỉ comment author) |
-| GET | `/feed` | ✓ | feed cá nhân hóa (following, 14 ngày, cursor) |
+| GET | `/feed` | ✓ | **mixed feed** — posts của following + ranked PUBLIC posts từ strangers fill (90 ngày, cursor phase `f:`/`s:`) (Polish R2) |
+| GET | `/users/suggested` | ✓ | suggested accounts to follow (FoF + popular fallback) (Polish R2) |
 
 > Mọi response trả post (single / list / feed) kèm `likesCount`, `commentsCount`, `isLikedByMe`, `isFollowingAuthor`. Chi tiết: `backend/CLAUDE.md` + Swagger `/docs`.
 

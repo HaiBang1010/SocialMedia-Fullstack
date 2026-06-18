@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { asyncHandler } from '../../middleware/asyncHandler';
 import { validate } from '../../middleware/validate';
 import { requireAuth, optionalAuth } from '../../middleware/auth';
-import { updateProfileSchema, groupableQuerySchema } from './users.schema';
+import { updateProfileSchema, groupableQuerySchema, suggestedQuerySchema } from './users.schema';
 import * as usersService from './users.service';
 import { paginationSchema } from '../posts/posts.schema';
 import * as postsService from '../posts/posts.service';
@@ -38,6 +38,20 @@ router.get(
   asyncHandler(async (req, res) => {
     const users = await usersService.getGroupableUsers(req.user!.id, req.query as any);
     res.json(users);
+  })
+);
+
+/**
+ * GET /users/suggested — suggested accounts to follow (friends-of-friends, popular fallback).
+ * Declared BEFORE /:username so the literal isn't captured as a username. `?limit=` cap (default 10).
+ */
+router.get(
+  '/suggested',
+  requireAuth,
+  validate(suggestedQuerySchema, 'query'),
+  asyncHandler(async (req, res) => {
+    const users = await usersService.getSuggestedUsers(req.user!.id, req.query as any);
+    res.json({ users });
   })
 );
 

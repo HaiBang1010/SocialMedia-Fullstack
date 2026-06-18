@@ -3,6 +3,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import type { Post } from '@/types/api';
 import { formatRelativeTime } from '@/lib/format';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
+import { useAuthStore } from '@/stores/authStore';
+import { useFollowAuthor } from '@/features/users/hooks/useFollowAuthor';
 import Avatar from '@/components/common/Avatar';
 import PostCarousel from './PostCarousel';
 import PostVideo from './PostVideo';
@@ -20,9 +22,14 @@ export default function PostCard({ post }: PostCardProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const isDesktop = useIsDesktop();
+  const meId = useAuthStore((s) => s.user?.id);
+  const followAuthor = useFollowAuthor();
   const [showShare, setShowShare] = useState(false);
 
   const { author } = post;
+  // Mixed feed (stranger posts): offer to follow the author inline. Not for own posts or authors
+  // already followed (followed-feed posts serialize isFollowingAuthor=true).
+  const showFollow = !post.isFollowingAuthor && author.id !== meId;
   const authorTo = `/users/${author.username}`;
   const detailTo = `/posts/${post.id}`;
   const detailState = isDesktop ? { background: location } : undefined;
@@ -30,13 +37,23 @@ export default function PostCard({ post }: PostCardProps) {
 
   return (
     <article className="overflow-hidden rounded-xl border bg-card">
-      <header className="flex items-center px-4 py-3">
-        <Link to={authorTo} className="flex min-w-0 items-center gap-3">
+      <header className="flex items-center gap-2 px-4 py-3">
+        <Link to={authorTo} className="flex min-w-0 flex-1 items-center gap-3">
           <Avatar user={author} size="sm" />
           <span className="truncate text-sm font-semibold hover:underline">
             @{author.username}
           </span>
         </Link>
+        {showFollow && (
+          <button
+            type="button"
+            onClick={() => followAuthor.mutate({ username: author.username, authorId: author.id })}
+            disabled={followAuthor.isPending}
+            className="shrink-0 text-sm font-semibold text-primary transition-opacity hover:opacity-80 disabled:opacity-50"
+          >
+            {followAuthor.isPending ? '…' : 'Follow'}
+          </button>
+        )}
       </header>
 
       {post.media.length > 0 &&

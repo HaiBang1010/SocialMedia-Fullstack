@@ -545,13 +545,12 @@ POST   /calls/:id/end                  # body { action: 'leave'|'end_for_all', r
 
 ## 6. Key Technical Decisions
 
-### Feed algorithm (Phase 2)
-- Nguồn: posts của các User mà current user đang follow, trong N = 14 ngày gần đây.
-- Pagination: cursor = `(createdAt, id)` chronological (stable, không lệch khi có post mới chèn vào). Limit 20/page.
-- Shuffle **client-side** sau khi fetch page (KHÔNG `$queryRaw` + `ORDER BY RANDOM()`) → giữ Prisma type-safe, server nhẹ. Trade-off: reload thấy cùng 20 posts nhưng thứ tự khác — acceptable cho Phase 2.
-- Edge case: user follow 0 người → trả empty + gợi ý users to follow (RightRail "Suggested for you").
-- KHÔNG chronological thuần, KHÔNG AI personalization.
-- Phase polish: nếu cần stable order per session → move shuffle sang server-side (lưu seed vào cursor).
+### Feed algorithm (Phase 2 → Polish R2 mixed feed)
+- **Phase 2**: posts của các User đang follow, window N ngày (14 → **90** ở Polish R2). Cursor `(createdAt, id)` chronological, limit 20/page. Shuffle client-side.
+- **Polish R2 — single MIXED feed** (`getFeed` rewrite): followed posts trước (keyset, **cursor `f:<postId>`**); khi followed exhausted trên 1 page → fill phần còn lại bằng **ranked stranger PUBLIC posts** (chuyển sang **cursor `s:<offset>`**). Stranger ranking = **FoF (followed-by-my-followings) → engagement (likes+comments) → recency**, tính **in-memory** trên pool capped (`STRANGER_POOL_CAP=100`) — reuse `postInclude`+`serializePost`, **no raw SQL**. `isFollowingAuthor` = true(followed)/false(stranger) → FE hiện nút Follow inline cho stranger (reuse field sẵn, no DTO change). New user (0 follow) → 100% strangers (popular vì FoF rỗng).
+- **Onboarding (Q1)**: new user (`followingCount===0`) thấy grid suggested + "Done" (FE FeedPage gate) TRƯỚC khi vào mixed feed.
+- PRIVATE / stranger-FOLLOWERS không bao giờ vào feed (stranger query PUBLIC-only). KHÔNG AI personalization.
+- Phase polish: ranking beyond pool cap (materialized score / keyset), stable per-session order.
 
 ### Comments: split endpoints + flatten on create (Phase 3.3 — approach a)
 - DB vẫn cho phép `parentId` self-relation, nhưng **flatten 1 cấp lúc create**: nếu reply trỏ tới 1 reply, backend reassign `parentId = parent.parentId` (về root) → chain DB tối đa 1 cấp.
@@ -635,6 +634,7 @@ POST   /calls/:id/end                  # body { action: 'leave'|'end_for_all', r
 | 6. Calls | 13-14 | Audio + video calls (1-1 + group) via LiveKit Cloud SFU. Call-as-Message + 4 REST endpoints + 3 socket events (call:incoming/declined/ended). Webhook + screen-share → backlog | ✅ Done |
 | 7. Polish | 15-16 | Notifications (LIKE/COMMENT/FOLLOW + 1h dedupe + `notification:new`) + unread badges + Postgres full-text search (tsvector + GIN) + default avatar (DiceBear). Hide bài / block / MENTION+STORY_VIEW notif / push → backlog | ✅ Done → **project 7/7 complete** |
 | Polish R1 | — | Toast (sonner) + Safari iOS voice (`audio/mp4`) + reply-to-message FULL (quote bubble + scroll/jump + long-press action sheet) + httpOnly cookie auth (refresh cookie + access token in-memory + boot-gate) | ✅ Done |
+| Polish R2 | — | Avatar upload (react-easy-crop + presign) + suggested follows (`/users/suggested` FoF+popular) + mixed feed (followed + ranked strangers, window 14→90, phase-cursor) + onboarding gate + stranger inline-Follow | ✅ Done |
 
 ---
 

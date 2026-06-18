@@ -6,6 +6,20 @@
 
 ---
 
+## 2026-06-18 — Phase Polish Round 2 (avatar + suggested follows + mixed feed) — ✅ COMPLETE
+
+**Done (BE `tsc` 0; FE `tsc -b` + `vite build` 0; service smoke pass; OpenAPI 47→48). KHÔNG migration** (no schema change). 3 feature discovery/profile, plan-first từng cái.
+
+- **Avatar upload (custom photo)**: BE gần như sẵn (Phase 2.5 `updateProfileSchema`/`updateProfile` đã nhận `avatarUrl`) — chỉ đổi **empty string → regenerate DiceBear** (`generateAvatarUrl(username)`) thay vì null. FE: dep `react-easy-crop`; `lib/cropAvatar.ts` (canvas crop → 512×512 JPEG q0.9); `AvatarUploadDialog.tsx` (pick image jpeg/png/webp ≤5MB → react-easy-crop aspect-1 round + zoom → `mediaApi.presign` → `uploadToPresignedUrl` → `PATCH /users/me {avatarUrl}` → toast); `UserProfilePage` edit-view: avatar section "Change photo" + "Reset to default" (inline confirm → `{avatarUrl:''}` backend regen). Reuse `/media/presign` (image, ≤5MB client cap). Orphan MinIO khi replace → BACKLOG.
+- **Suggested follows**: BE `GET /users/suggested?limit=10` (requireAuth, đặt **trước `/:username`**) — mixed: **FoF** (`prisma.follow.groupBy` ranked) cho user đã follow, **popular fallback** (`orderBy: { followers: { _count: 'desc' } }`) cho new user, fill popular khi FoF < limit; exclude self + already-followed. FE: `useSuggestedUsers` (1 query limit 10, 5-min stale), `useFollowSuggested` (optimistic remove + invalidate), `SuggestedUserCard` (compact/card), `EmptyFeedSuggestions` (grid), **RightRail refactor** static→real (top 5). OpenAPI 47→48.
+- **Feed window 14→90 → MIXED feed**: ban đầu fix bug "feed mất bài" (post >14 ngày bị cắt) → nới `FEED_DAYS` 14→**90**; rồi rewrite `getFeed` thành **single mixed feed**: followed posts (keyset cursor `f:<id>`) → fill **ranked stranger PUBLIC posts** (in-memory pool cap 100, **FoF → engagement[likes+comments] → recency**, cursor `s:<offset>`). `isFollowingAuthor` = true (followed) / false (stranger) — **reuse field sẵn có, KHÔNG đổi Post DTO/OpenAPI**. Reuse `postInclude`/`serializePost` (type-parity tự động, no raw SQL).
+- **Onboarding gate** (FeedPage): `followingCount===0 && !onboardingDone` (qua `useUserProfile(me)`) → `EmptyFeedSuggestions onboarding` (grid + **Done** hiện sau follow ≥1) → Done → invalidate feed+user → mixed feed.
+- **Stranger Follow button** (PostCard): `!post.isFollowingAuthor && author.id!==meId` → nút Follow cạnh avatar; `useFollowAuthor` → on success `markAuthorFollowedInCaches` (patch isFollowingAuthor khắp feed cache, **no refetch → giữ scroll**) + invalidate user(username)+suggested.
+
+**Smoke**: avatar (set URL / reset→DiceBear, restore), suggested (FoF + popular, excl self/followed, shape sạch), mixed feed (T1 new-user 100% strangers; T2 mix followed-first + fill; T5 excl self/followed/PRIVATE; page boundary `f`→`s:` + stranger pagination). **Tech debt → BACKLOG**: avatar orphan MinIO cleanup, `/explore` page, FoF global tiebreak, stranger pool cap, mixed-feed reclassification on next load, follow-approval flow.
+
+---
+
 ## 2026-06-17 — Phase Polish Round 1 (4 items từ BACKLOG) — ✅ COMPLETE
 
 **Done (BE `tsc` 0; FE `tsc -b` + `vite build` 0 lỗi **2141 modules**; 1 migration applied; OpenAPI vẫn **47** path keys; backend cookie smoke 5/5 + reply-to service smoke 4/4 pass).** 4 item polish chọn từ BACKLOG, làm tuần tự A→C→B→D (rủi ro tăng dần). Mỗi item: plan-first → duyệt tay → apply → verify.

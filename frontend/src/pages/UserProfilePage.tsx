@@ -7,14 +7,18 @@ import { useComposerStore } from '@/stores/composerStore';
 import { useStoryViewerStore } from '@/stores/storyViewerStore';
 import { useUserProfile } from '@/features/users/hooks/useUserProfile';
 import { useStartDirectConversation } from '@/features/messaging/hooks/useStartDirectConversation';
+import { usersApi } from '@/api';
 import { queryKeys } from '@/lib/queryKeys';
 import { formatNumber } from '@/lib/format';
+import { notifyError, notifySuccess } from '@/lib/toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import EmptyState from '@/components/common/EmptyState';
 import PostsGrid from '@/components/post/PostsGrid';
 import FollowButton from '@/components/profile/FollowButton';
 import { ProfileEditForm } from '@/components/profile/ProfileEditForm';
+import AvatarUploadDialog from '@/components/profile/AvatarUploadDialog';
+import type { User } from '@/types/api';
 
 function initials(name: string): string {
   return name
@@ -38,10 +42,35 @@ export default function UserProfilePage() {
   const navigate = useNavigate();
   const startConversation = useStartDirectConversation();
   const [editing, setEditing] = useState(false);
+  const [avatarDialogOpen, setAvatarDialogOpen] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   const isSelf = me?.username === username;
 
   const { data: user, isLoading, isError } = useUserProfile(username);
+
+  // Shared after an avatar change (upload dialog OR reset-to-default): update the in-memory user
+  // (Sidebar/me avatars) + refetch the profile query (header img). Stays in the edit view.
+  const onAvatarSaved = (updated: User) => {
+    updateUser(updated);
+    queryClient.invalidateQueries({ queryKey: queryKeys.user(username) });
+  };
+
+  // Reset to the DiceBear default — backend regenerates it from an empty-string avatarUrl.
+  const handleResetAvatar = async () => {
+    setResetting(true);
+    try {
+      const { user: updated } = await usersApi.updateMe({ avatarUrl: '' });
+      onAvatarSaved(updated);
+      notifySuccess('Photo reset to default');
+      setConfirmReset(false);
+    } catch (err) {
+      notifyError(err, "Couldn't reset photo");
+    } finally {
+      setResetting(false);
+    }
+  };
 
   if (isLoading) {
     return <div className="p-8 text-muted-foreground">Loading…</div>;
@@ -58,7 +87,57 @@ export default function UserProfilePage() {
           <CardHeader>
             <CardTitle>Edit profile</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-6">
+            {/* Avatar section — change photo (crop + upload) or reset to the DiceBear default. */}
+            <div className="flex items-center gap-4">
+              <span className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-2xl font-medium text-muted-foreground">
+                {user.avatarUrl ? (
+                  <img src={user.avatarUrl} alt={user.name} className="size-full object-cover" />
+                ) : (
+                  initials(user.name)
+                )}
+              </span>
+              <div className="flex flex-col items-start gap-1.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setAvatarDialogOpen(true)}
+                >
+                  Change photo
+                </Button>
+                {confirmReset ? (
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="text-muted-foreground">Reset to default?</span>
+                    <button
+                      type="button"
+                      onClick={handleResetAvatar}
+                      disabled={resetting}
+                      className="text-destructive hover:underline disabled:opacity-50"
+                    >
+                      {resetting ? 'Resetting…' : 'Reset'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmReset(false)}
+                      disabled={resetting}
+                      className="text-muted-foreground hover:underline"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmReset(true)}
+                    className="text-xs text-muted-foreground hover:underline"
+                  >
+                    Reset to default
+                  </button>
+                )}
+              </div>
+            </div>
+
             <ProfileEditForm
               initialName={user.name}
               initialBio={user.bio ?? ''}
@@ -75,6 +154,12 @@ export default function UserProfilePage() {
             />
           </CardContent>
         </Card>
+
+        <AvatarUploadDialog
+          open={avatarDialogOpen}
+          onOpenChange={setAvatarDialogOpen}
+          onSaved={onAvatarSaved}
+        />
       </div>
     );
   }
