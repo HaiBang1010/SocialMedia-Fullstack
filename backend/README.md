@@ -1,144 +1,144 @@
 # Backend — Phase 1 Setup Guide
 
-Hướng dẫn từng bước cho người mới. Đọc và làm theo thứ tự, đừng nhảy bước.
+A step-by-step guide for beginners. Read and follow it in order — don't skip steps.
 
-## Bạn cần chuẩn bị
+## What you need to prepare
 
-| Tool | Vì sao | Cài ở đâu |
+| Tool | Why | Where to install |
 |---|---|---|
-| Node.js 20+ | Chạy backend | https://nodejs.org (chọn LTS) |
-| Docker Desktop | Chạy PostgreSQL | https://docker.com |
-| Code editor | Sửa code | VS Code (https://code.visualstudio.com) |
-| Postman hoặc curl | Test API | Postman (https://postman.com) |
+| Node.js 20+ | Run the backend | https://nodejs.org (choose LTS) |
+| Docker Desktop | Run PostgreSQL | https://docker.com |
+| Code editor | Edit code | VS Code (https://code.visualstudio.com) |
+| Postman or curl | Test the API | Postman (https://postman.com) |
 
-Sau khi cài, mở terminal và check version để confirm:
+After installing, open a terminal and check the versions to confirm:
 ```bash
-node --version    # v20.x.x trở lên
-docker --version  # Docker version 24.x.x trở lên
+node --version    # v20.x.x or higher
+docker --version  # Docker version 24.x.x or higher
 ```
 
 ---
 
-## Bước 1 — Đặt thư mục backend vào project của bạn
+## Step 1 — Place the backend folder into your project
 
-Bạn đang ở `social-media/`. Copy folder `backend/` này vào đó. Cấu trúc cuối cùng:
+You are in `social-media/`. Copy this `backend/` folder into it. The final structure:
 
 ```
 social-media/
-├── backend/         ← từ guide này
-└── frontend/        ← phase sau
+├── backend/         ← from this guide
+└── frontend/        ← a later phase
 ```
 
-Vào folder backend trong terminal:
+Enter the backend folder in your terminal:
 ```bash
 cd social-media/backend
 ```
 
 ---
 
-## Bước 2 — Cài dependencies
+## Step 2 — Install dependencies
 
 ```bash
 npm install
 ```
 
-Lệnh này đọc `package.json` và tải toàn bộ thư viện về `node_modules/`. Mất ~1-2 phút.
+This command reads `package.json` and downloads all the libraries into `node_modules/`. It takes ~1-2 minutes.
 
-> 💡 **Không bao giờ commit `node_modules/` lên Git** — nó nặng và có thể tự cài lại bằng `npm install`. File `.gitignore` đã loại trừ sẵn.
+> 💡 **Never commit `node_modules/` to Git** — it is heavy and can be reinstalled with `npm install`. The `.gitignore` file already excludes it.
 
 ---
 
-## Bước 3 — Khởi động PostgreSQL bằng Docker
+## Step 3 — Start PostgreSQL with Docker
 
-Tại sao Docker? — Để khỏi phải cài Postgres trực tiếp lên máy. Mỗi project 1 DB riêng, không xung đột, dọn dẹp dễ.
+Why Docker? — So you don't have to install Postgres directly on your machine. Each project gets its own DB, no conflicts, and easy cleanup.
 
-Khởi động Postgres ở chế độ chạy nền:
+Start Postgres in detached (background) mode:
 ```bash
 docker compose up -d
 ```
 
-Verify Postgres đã chạy:
+Verify that Postgres is running:
 ```bash
 docker compose ps
 ```
 
-Bạn sẽ thấy container `social-media-postgres` ở trạng thái `healthy` hoặc `running`.
+You should see the `social-media-postgres` container in the `healthy` or `running` state.
 
-> ⚠️ **Nếu lỗi `port 5432 already in use`**: bạn có Postgres khác đang chạy. Hoặc tắt nó, hoặc đổi port trong `docker-compose.yml` (vd `"5433:5432"`) và sửa `DATABASE_URL` tương ứng.
+> ⚠️ **If you get the error `port 5432 already in use`**: you have another Postgres running. Either stop it, or change the port in `docker-compose.yml` (e.g. `"5433:5432"`) and update `DATABASE_URL` accordingly.
 
 ---
 
-## Bước 4 — Tạo file `.env` từ template
+## Step 4 — Create the `.env` file from the template
 
 ```bash
 cp .env.example .env
 ```
 
-(Trên Windows: `copy .env.example .env`)
+(On Windows: `copy .env.example .env`)
 
-Mở file `.env` ra. **BẮT BUỘC đổi 2 secret này** (random ít nhất 32 ký tự):
+Open the `.env` file. **You MUST change these 2 secrets** (random, at least 32 characters):
 ```
 JWT_ACCESS_SECRET="..."
 JWT_REFRESH_SECRET="..."
 ```
 
-Cách tạo random secret nhanh:
+A quick way to generate a random secret:
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-Chạy 2 lần, dán vào 2 biến.
+Run it twice and paste the values into the 2 variables.
 
 ---
 
-## Bước 5 — Tạo database schema bằng Prisma
+## Step 5 — Create the database schema with Prisma
 
 ```bash
 npx prisma migrate dev --name init
 ```
 
-Lệnh này:
-1. Đọc `prisma/schema.prisma`
-2. Tạo file SQL migration trong `prisma/migrations/`
-3. Apply lên Postgres → tạo bảng `User`
-4. Generate Prisma Client (typed query API) trong `node_modules/`
+This command:
+1. Reads `prisma/schema.prisma`
+2. Creates a SQL migration file in `prisma/migrations/`
+3. Applies it to Postgres → creates the `User` table
+4. Generates the Prisma Client (typed query API) in `node_modules/`
 
-Verify schema đã tạo:
+Verify the schema was created:
 ```bash
 npx prisma studio
 ```
 
-→ Mở browser ở http://localhost:5555. Bạn thấy bảng `User` rỗng. Đóng tab khi xong.
+→ Opens a browser at http://localhost:5555. You'll see an empty `User` table. Close the tab when done.
 
 ---
 
-## Bước 6 — Chạy server
+## Step 6 — Run the server
 
 ```bash
 npm run dev
 ```
 
-Bạn sẽ thấy:
+You should see:
 ```
 🚀 Server chạy tại http://0.0.0.0:3000
    Environment: development
 ```
 
-Test health check (mở terminal khác):
+Test the health check (open another terminal):
 ```bash
 curl http://localhost:3000/health
 ```
 
-Trả về:
+Returns:
 ```json
 {"status":"ok","timestamp":"2026-..."}
 ```
 
-→ **Server hoạt động!** Để chạy chế độ watch (auto reload khi sửa code), cứ để `npm run dev` chạy trong terminal đó.
+→ **The server works!** To run in watch mode (auto reload when you edit code), just leave `npm run dev` running in that terminal.
 
 ---
 
-## Bước 7 — Test toàn bộ flow auth bằng curl
+## Step 7 — Test the entire auth flow with curl
 
 ### 7.1 Register
 
@@ -162,7 +162,7 @@ Response (201):
 }
 ```
 
-**LƯU LẠI** `accessToken` để dùng ở bước sau.
+**SAVE** the `accessToken` to use in the next step.
 
 ### 7.2 Login
 
@@ -175,17 +175,17 @@ curl -X POST http://localhost:3000/auth/login \
   }'
 ```
 
-(`identifier` có thể là email HOẶC username)
+(`identifier` can be an email OR a username)
 
-### 7.3 Get current user (cần token)
+### 7.3 Get current user (token required)
 
-Thay `<TOKEN>` bằng accessToken từ bước 7.1:
+Replace `<TOKEN>` with the accessToken from step 7.1:
 ```bash
 curl http://localhost:3000/auth/me \
   -H "Authorization: Bearer <TOKEN>"
 ```
 
-Trả về user info hiện tại.
+Returns the current user info.
 
 ### 7.4 Update profile
 
@@ -196,28 +196,28 @@ curl -X PATCH http://localhost:3000/users/me \
   -d '{"bio": "Hello world!", "name": "New Name"}'
 ```
 
-### 7.5 Test các trường hợp lỗi
+### 7.5 Test the error cases
 
-**Register trùng email** → 409 Conflict:
+**Register with a duplicate email** → 409 Conflict:
 ```bash
 curl -X POST http://localhost:3000/auth/register \
   -H "Content-Type: application/json" \
   -d '{"username":"test_user2","email":"test@example.com","password":"password123","name":"x"}'
 ```
 
-**Login sai password** → 401:
+**Login with wrong password** → 401:
 ```bash
 curl -X POST http://localhost:3000/auth/login \
   -H "Content-Type: application/json" \
   -d '{"identifier":"test@example.com","password":"wrong"}'
 ```
 
-**Truy cập /auth/me không token** → 401:
+**Access /auth/me without a token** → 401:
 ```bash
 curl http://localhost:3000/auth/me
 ```
 
-**Validation lỗi (password ngắn)** → 400 với chi tiết:
+**Validation error (password too short)** → 400 with details:
 ```bash
 curl -X POST http://localhost:3000/auth/register \
   -H "Content-Type: application/json" \
@@ -226,51 +226,51 @@ curl -X POST http://localhost:3000/auth/register \
 
 ---
 
-## Khi gặp lỗi, kiểm tra theo thứ tự
+## When you hit an error, check in this order
 
-1. Postgres có chạy không? → `docker compose ps`
-2. `.env` có đúng `DATABASE_URL` và 2 JWT_SECRET không?
-3. Migration đã chạy chưa? → `npx prisma studio` xem có bảng User không
-4. Server đang chạy? → `npm run dev` có log không?
-5. Đọc log server — error message thường khá rõ.
+1. Is Postgres running? → `docker compose ps`
+2. Does `.env` have the correct `DATABASE_URL` and the 2 JWT_SECRETs?
+3. Has the migration run? → `npx prisma studio` to check whether the User table exists
+4. Is the server running? → does `npm run dev` produce logs?
+5. Read the server logs — the error message is usually quite clear.
 
 ---
 
-## Mỗi file để làm gì
+## What each file is for
 
 ```
 backend/
 ├── docker-compose.yml      → Postgres container
-├── package.json            → list deps + npm scripts
+├── package.json            → list of deps + npm scripts
 ├── tsconfig.json           → TypeScript settings
-├── .env                    → secrets (KHÔNG commit)
+├── .env                    → secrets (DO NOT commit)
 ├── .env.example            → template (commit)
 ├── .gitignore
 │
 ├── prisma/
-│   └── schema.prisma       → định nghĩa bảng → Prisma generate code
+│   └── schema.prisma       → table definitions → Prisma generates code
 │
 └── src/
-    ├── server.ts           → Express app entry, đăng ký middleware + routes
+    ├── server.ts           → Express app entry, registers middleware + routes
     │
     ├── config/
-    │   └── env.ts          → đọc .env + validate bằng Zod
+    │   └── env.ts          → reads .env + validates with Zod
     │
-    ├── lib/                → utilities tái dùng nhiều nơi
+    ├── lib/                → utilities reused in many places
     │   ├── prisma.ts       → singleton Prisma client
     │   ├── jwt.ts          → sign/verify JWT
     │   └── password.ts     → hash/verify password
     │
-    ├── middleware/         → các Express middleware
+    ├── middleware/         → Express middleware
     │   ├── auth.ts         → requireAuth (verify JWT)
-    │   ├── validate.ts     → validate request body bằng Zod
-    │   ├── asyncHandler.ts → bọc async route, bắt lỗi
-    │   └── error.ts        → error handler tập trung
+    │   ├── validate.ts     → validate request body with Zod
+    │   ├── asyncHandler.ts → wraps async routes, catches errors
+    │   └── error.ts        → centralized error handler
     │
-    └── modules/            → mỗi feature 1 folder
+    └── modules/            → one folder per feature
         ├── auth/
-        │   ├── auth.routes.ts   → định nghĩa endpoints
-        │   ├── auth.service.ts  → logic nghiệp vụ
+        │   ├── auth.routes.ts   → defines endpoints
+        │   ├── auth.service.ts  → business logic
         │   └── auth.schema.ts   → Zod validation schemas
         └── users/
             ├── users.routes.ts
@@ -278,31 +278,31 @@ backend/
             └── users.schema.ts
 ```
 
-**Quy ước**: routes chỉ điều phối (gọi service, trả response). KHÔNG viết logic phức tạp trong routes. Logic ở **service**. Sau này dễ test và reuse.
+**Convention**: routes only orchestrate (call the service, return the response). Do NOT write complex logic in routes. Logic lives in the **service**. This makes it easier to test and reuse later.
 
 ---
 
-## Lệnh hay dùng
+## Commonly used commands
 
 ```bash
-npm run dev               # chạy dev server (auto reload)
-npm run prisma:studio     # GUI xem/sửa data trong DB
-npm run prisma:migrate    # tạo migration mới khi sửa schema
+npm run dev               # run the dev server (auto reload)
+npm run prisma:studio     # GUI to view/edit data in the DB
+npm run prisma:migrate    # create a new migration when you change the schema
 docker compose up -d      # start Postgres
-docker compose down       # dừng Postgres (không xóa data)
-docker compose down -v    # dừng + xóa hết data (reset DB)
+docker compose down       # stop Postgres (without deleting data)
+docker compose down -v    # stop + delete all data (reset the DB)
 ```
 
 ---
 
-## Khi nào sang Phase tiếp?
+## When do you move on to the next Phase?
 
-Khi bạn đã làm được TẤT CẢ:
-- [x] Server chạy không lỗi
-- [x] Register tạo được user (check `npx prisma studio`)
-- [x] Login trả về token
-- [x] `GET /auth/me` với token trả đúng user
-- [x] Update profile thành công
-- [x] Test các case lỗi (409, 401, 400) đều hoạt động
+When you have done ALL of the following:
+- [x] Server runs without errors
+- [x] Register creates a user (check `npx prisma studio`)
+- [x] Login returns a token
+- [x] `GET /auth/me` with a token returns the correct user
+- [x] Update profile succeeds
+- [x] The error cases (409, 401, 400) all work
 
-→ Báo tôi xong, tôi sẽ làm tiếp **frontend** (Vite + React + UI auth).
+→ Let me know you're done, and I'll continue with the **frontend** (Vite + React + auth UI).

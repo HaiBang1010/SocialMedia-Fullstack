@@ -1,99 +1,99 @@
-# Working with Claude — Hướng dẫn chuyên sâu
+# Working with Claude — In-depth Guide
 
-> Mục tiêu: từ "user của Claude" thành "AI engineer biết khai thác Claude đúng cách".
+> Goal: go from "a Claude user" to "an AI engineer who knows how to leverage Claude properly".
 >
-> Đọc theo thứ tự. Mỗi phần ~5-10 phút. Có ví dụ thực hành ở cuối từng phần.
+> Read in order. Each section takes ~5-10 minutes. There's a hands-on example at the end of every section.
 
 ---
 
-## Phần 1 — Mental model: hiểu Claude trước khi dùng
+## Part 1 — Mental model: understand Claude before using it
 
-Đa số bug khi prompt đến từ **giả định sai về cách Claude hoạt động**. 5 sự thật quan trọng nhất:
+Most prompting bugs come from **wrong assumptions about how Claude works**. The 5 most important facts:
 
-### 1.1 Context window là TẤT CẢ Claude "biết" trong một cuộc trò chuyện
+### 1.1 The context window is EVERYTHING Claude "knows" within a conversation
 
-Mỗi lần gửi message, Claude đọc **toàn bộ** lịch sử chat + system prompt + tools available + uploaded files. Đó là "context window". Hết context → Claude bắt đầu quên đầu cuộc trò chuyện.
+Every time you send a message, Claude reads the **entire** chat history + system prompt + available tools + uploaded files. That's the "context window". Run out of context → Claude starts forgetting the beginning of the conversation.
 
-**Hệ quả:**
-- Cuộc trò chuyện càng dài, càng tốn token và càng dễ "lạc"
-- Mở chat mới = Claude không biết gì về chat cũ (trừ khi bật Memory hoặc dùng Projects)
-- File upload nặng = ăn rất nhiều context
+**Consequences:**
+- The longer the conversation, the more tokens it costs and the easier it is to "drift"
+- Opening a new chat = Claude knows nothing about the old chat (unless Memory is enabled or you use Projects)
+- Heavy file uploads consume a lot of context
 
-**Quy tắc:**
-- Task lớn → chia thành conversations riêng, mỗi cái tập trung 1 việc
-- Đừng paste 10000 dòng code rồi hỏi 1 câu nhỏ — extract phần liên quan thôi
+**Rules:**
+- Large task → split into separate conversations, each focused on one thing
+- Don't paste 10000 lines of code then ask one small question — extract only the relevant part
 
-### 1.2 Knowledge cutoff: Claude không biết thời sự
+### 1.2 Knowledge cutoff: Claude doesn't know current events
 
-Claude của tôi (Opus 4.7) có cutoff là cuối tháng 1/2026. Bất cứ chuyện gì sau đó — sản phẩm mới, tin tức, version library mới — Claude **không biết** nếu không search.
+My version of Claude (Opus 4.7) has a cutoff of late January 2026. Anything after that — new products, news, new library versions — Claude **doesn't know** unless it searches.
 
-**Mẹo:** Nếu hỏi về thư viện/framework mới, version mới, hoặc thứ thay đổi nhanh → bảo Claude search trước, hoặc tự dán docs vào.
+**Tip:** If you're asking about a new library/framework, a new version, or something that changes fast → tell Claude to search first, or paste the docs in yourself.
 
-### 1.3 Claude không "biết" — Claude "gọi tools"
+### 1.3 Claude doesn't "know" — Claude "calls tools"
 
-Khi Claude lấy tin tức, đọc file, chạy code, vẽ UI — không phải Claude "biết". Claude **gọi tool** mà environment cung cấp. Trên Claude.ai có sẵn: web_search, code execution, file creation, image generation, MCP connectors. Trên API thì developer tự define tools.
+When Claude fetches news, reads files, runs code, or renders UI — it's not that Claude "knows". Claude **calls a tool** provided by the environment. On Claude.ai these are available out of the box: web_search, code execution, file creation, image generation, MCP connectors. On the API, the developer defines tools themselves.
 
-**Hệ quả:** Cùng một câu hỏi, Claude trên Claude.ai có thể trả khác Claude trên API — vì tools khác nhau.
+**Consequence:** The same question can get a different answer from Claude on Claude.ai versus Claude on the API — because the tools differ.
 
-### 1.4 Claude là stateless giữa các conversations
+### 1.4 Claude is stateless between conversations
 
-Mặc định, mỗi cuộc trò chuyện là một slate trắng. Nếu hôm qua bạn dạy Claude một quy ước, hôm nay phải dạy lại — TRỪ KHI:
-- **Memory**: feature opt-in trong Settings, Claude tự nhớ thông tin về bạn qua chat
-- **Projects**: tạo project, viết "project instructions" — mọi chat trong project đều dùng instructions đó
-- **Search past chats**: Claude có thể search qua các chat cũ (gần đây Anthropic mới thêm)
+By default, every conversation is a blank slate. If you taught Claude a convention yesterday, you have to teach it again today — UNLESS:
+- **Memory**: an opt-in feature in Settings; Claude remembers information about you across chats
+- **Projects**: create a project, write "project instructions" — every chat in the project uses those instructions
+- **Search past chats**: Claude can search through old chats (Anthropic added this recently)
 
-### 1.5 Claude có thể được "đào tạo lại" trong runtime qua skills, system prompts, MCP
+### 1.5 Claude can be "retrained" at runtime via skills, system prompts, MCP
 
-Đây là chìa khóa của AI engineering: bạn KHÔNG fine-tune model — bạn **shape behavior** qua context. Skills, MCP, subagents, custom system prompts đều là cách làm điều này. Phần sau sẽ đi sâu.
+This is the key to AI engineering: you do NOT fine-tune the model — you **shape behavior** through context. Skills, MCP, subagents, custom system prompts are all ways to do this. Later sections go deeper.
 
 ---
 
-## Phần 2 — Hệ sinh thái Anthropic: 4 sản phẩm, dùng cái nào khi nào
+## Part 2 — The Anthropic ecosystem: 4 products, which to use when
 
-| Sản phẩm | Dạng | Dùng khi nào |
+| Product | Form | Use when |
 |---|---|---|
-| **Claude.ai** | Web/mobile chat | Tasks hằng ngày: viết, brainstorm, research, code review |
-| **Claude Desktop** | App desktop | Cùng Claude.ai + có thể cài MCP servers local (đọc file, control desktop) |
-| **Claude Code** | CLI tool | Coding agentic — Claude tự đọc/sửa code, chạy test, commit. Cần Node.js |
-| **Claude API** | REST API | Build app riêng tích hợp Claude |
+| **Claude.ai** | Web/mobile chat | Everyday tasks: writing, brainstorming, research, code review |
+| **Claude Desktop** | Desktop app | Same as Claude.ai + can install local MCP servers (read files, control desktop) |
+| **Claude Code** | CLI tool | Agentic coding — Claude reads/edits code, runs tests, commits on its own. Requires Node.js |
+| **Claude API** | REST API | Build your own app integrating Claude |
 
-**Khi nào nên dùng cái gì:**
-- Học, viết, suy luận → **Claude.ai**
-- Code dự án thực tế (như cái social media này) → **Claude Code** (chạy trong terminal của project)
-- Cần connect Claude với Gmail/Slack/Notion local → **Claude Desktop** với MCP
-- Build chatbot cho user → **Claude API**
+**When to use what:**
+- Learning, writing, reasoning → **Claude.ai**
+- Coding a real project (like this social media app) → **Claude Code** (run inside the project's terminal)
+- Need to connect Claude with local Gmail/Slack/Notion → **Claude Desktop** with MCP
+- Build a chatbot for users → **Claude API**
 
-> Trang này: https://claude.com/product để xem chi tiết sản phẩm.
-> Docs API: https://docs.claude.com
-> Docs Code: https://docs.claude.com/en/docs/claude-code/overview
+> This page: https://claude.com/product for product details.
+> API docs: https://docs.claude.com
+> Code docs: https://docs.claude.com/en/docs/claude-code/overview
 
 ---
 
-## Phần 3 — Skills: dạy Claude một workflow cụ thể
+## Part 3 — Skills: teach Claude a specific workflow
 
-### 3.1 Skill là gì
+### 3.1 What a skill is
 
-**Skill** là một folder chứa file `SKILL.md` (và optional script/tài liệu phụ) — Claude sẽ tự load nó khi gặp task phù hợp. Coi như một "expansion pack" cho Claude.
+A **Skill** is a folder containing a `SKILL.md` file (and optional scripts/supporting docs) — Claude loads it automatically when it hits a matching task. Think of it as an "expansion pack" for Claude.
 
-Ví dụ: pre-built skill `pdf` của Anthropic có:
-- `SKILL.md`: hướng dẫn Claude cách xử lý PDF (extract text, fill form, merge)
-- Python scripts để Claude chạy
+Example: Anthropic's pre-built `pdf` skill has:
+- `SKILL.md`: instructs Claude how to handle PDFs (extract text, fill forms, merge)
+- Python scripts for Claude to run
 - Templates
 
-Khi user yêu cầu "extract form fields từ file PDF này", Claude tự đọc skill và biết cách làm. **Không phải Claude đã "biết" — skill dạy nó.**
+When a user asks to "extract form fields from this PDF file", Claude reads the skill and knows how to do it. **It's not that Claude already "knew" — the skill taught it.**
 
-### 3.2 Cấu trúc một skill
+### 3.2 The structure of a skill
 
 ```
 my-skill/
-├── SKILL.md              # bắt buộc — instructions + metadata
-├── scripts/              # optional — code Claude có thể chạy
+├── SKILL.md              # required — instructions + metadata
+├── scripts/              # optional — code Claude can run
 │   └── helper.py
-└── reference/            # optional — docs phụ
+└── reference/            # optional — supporting docs
     └── examples.md
 ```
 
-`SKILL.md` có YAML frontmatter ở đầu:
+`SKILL.md` has YAML frontmatter at the top:
 
 ```markdown
 ---
@@ -116,33 +116,33 @@ description: "Use this skill when user wants to [TASK]. Triggers on keywords X, 
 - Never modify files outside /workspace
 ```
 
-**Quy tắc viết skill tốt:**
-- `description` cực kỳ quan trọng — Claude dựa vào đó để quyết định CÓ load skill không. Viết rõ KHI NÀO dùng và KHI NÀO không.
-- Instructions ngắn gọn, action-oriented
-- Bundle script khi tác vụ deterministic (parse PDF, validate JSON) — đỡ tốn token và chính xác hơn
+**Rules for writing a good skill:**
+- `description` is extremely important — Claude relies on it to decide WHETHER to load the skill. State clearly WHEN to use it and WHEN not to.
+- Keep instructions short and action-oriented
+- Bundle scripts when the task is deterministic (parse PDF, validate JSON) — it costs fewer tokens and is more accurate
 
-### 3.3 Pre-built skills của Anthropic
+### 3.3 Anthropic's pre-built skills
 
-Trên Claude.ai paid plan và Claude Code, đã có sẵn:
-- **docx** — tạo/sửa Word documents
-- **pptx** — tạo PowerPoint
-- **xlsx** — tạo Excel với formulas, charts
-- **pdf** — tạo, fill, merge PDF
+On the Claude.ai paid plan and in Claude Code, these are available out of the box:
+- **docx** — create/edit Word documents
+- **pptx** — create PowerPoint
+- **xlsx** — create Excel with formulas, charts
+- **pdf** — create, fill, merge PDF
 - **frontend-design** — design web UI
-- **canvas-design** — design poster/art
+- **canvas-design** — design posters/art
 
-Khi bạn nói "tạo slide deck giới thiệu sản phẩm", Claude tự load `pptx` skill — không cần dạy.
+When you say "create a slide deck introducing the product", Claude loads the `pptx` skill automatically — no teaching needed.
 
-### 3.4 Tạo custom skill cho team/project
+### 3.4 Create a custom skill for your team/project
 
-Trường hợp dùng: bạn muốn Claude luôn viết commit message theo Conventional Commits. Thay vì paste rule mỗi lần → tạo skill.
+Use case: you want Claude to always write commit messages following Conventional Commits. Instead of pasting the rule every time → create a skill.
 
-**Cách tạo:**
-- **Trong Claude.ai**: Settings → Capabilities → Skills → Create new skill
-- **Trong Claude Code**: viết file `SKILL.md` trong `.claude/skills/<skill-name>/`
-- **Trong API**: pass skill files trong request
+**How to create:**
+- **In Claude.ai**: Settings → Capabilities → Skills → Create new skill
+- **In Claude Code**: write a `SKILL.md` file in `.claude/skills/<skill-name>/`
+- **In the API**: pass skill files in the request
 
-**Ví dụ skill thực tế cho project social media:**
+**A real-world skill example for the social media project:**
 
 ```markdown
 ---
@@ -153,9 +153,9 @@ description: "Use when user asks to modify Prisma schema. Walks through migratio
 # Prisma Schema Update Workflow
 
 ## When to use
-- User says "thêm field/model/relation vào Prisma"
-- User says "đổi tên column"
-- User says "thêm index"
+- User says "add a field/model/relation to Prisma"
+- User says "rename a column"
+- User says "add an index"
 
 ## Steps
 1. Read current `prisma/schema.prisma`
@@ -175,27 +175,27 @@ description: "Use when user asks to modify Prisma schema. Walks through migratio
 - If schema change is destructive (drop column with data), warn user first
 ```
 
-### 3.5 Khi nào dùng skill vs prompt
+### 3.5 When to use a skill vs a prompt
 
-| Tình huống | Cách |
+| Situation | Approach |
 |---|---|
-| Task 1 lần | Prompt thẳng |
-| Task lặp lại 2-3 lần | Project instructions |
-| Task lặp lại với quy trình phức tạp | Skill |
-| Cần chạy code deterministic (parse, validate) | Skill có bundle script |
+| One-off task | Prompt directly |
+| Task repeated 2-3 times | Project instructions |
+| Repeated task with a complex procedure | Skill |
+| Need to run deterministic code (parse, validate) | Skill with a bundled script |
 
-> Anthropic có repo skills mẫu: https://github.com/anthropics/skills
+> Anthropic has a sample skills repo: https://github.com/anthropics/skills
 > Docs: https://docs.claude.com/en/docs/claude-code/skills
 
 ---
 
-## Phần 4 — MCP: cho Claude truy cập tools/data ngoài
+## Part 4 — MCP: give Claude access to external tools/data
 
-### 4.1 MCP là gì
+### 4.1 What MCP is
 
-**Model Context Protocol** là **chuẩn mở** Anthropic ra mắt cuối 2024. Trước MCP, mỗi lần muốn Claude truy cập một service (Slack, GitHub, Postgres) phải code custom. MCP giải quyết bằng cách định nghĩa giao thức chuẩn — viết MCP server 1 lần, bất kỳ AI client nào hỗ trợ MCP đều dùng được (Claude, Cursor, Zed, ...).
+The **Model Context Protocol** is an **open standard** Anthropic released in late 2024. Before MCP, every time you wanted Claude to access a service (Slack, GitHub, Postgres) you had to write custom code. MCP solves this by defining a standard protocol — write an MCP server once, and any AI client that supports MCP can use it (Claude, Cursor, Zed, ...).
 
-Ví von: MCP là **cổng USB-C cho AI**. Trước đó mỗi tool một loại dây.
+Analogy: MCP is **the USB-C port for AI**. Before it, every tool had its own cable.
 
 ### 4.2 Architecture
 
@@ -211,22 +211,22 @@ Ví von: MCP là **cổng USB-C cho AI**. Trước đó mỗi tool một loại 
 └─────────────────┘                    └─────────────────┘
 ```
 
-- **Host**: app chứa Claude (Claude Desktop, Claude Code, ...)
-- **MCP Server**: process chạy riêng, expose capabilities
-- **3 loại "primitives"**:
-  - **Tools**: actions Claude có thể gọi (`send_email`, `query_db`)
-  - **Resources**: data Claude có thể đọc (`@gmail/inbox`, `@notion/page-123`)
-  - **Prompts**: templates user có thể trigger ("/review-pr")
+- **Host**: the app that contains Claude (Claude Desktop, Claude Code, ...)
+- **MCP Server**: a separate process that exposes capabilities
+- **3 kinds of "primitives"**:
+  - **Tools**: actions Claude can call (`send_email`, `query_db`)
+  - **Resources**: data Claude can read (`@gmail/inbox`, `@notion/page-123`)
+  - **Prompts**: templates the user can trigger ("/review-pr")
 
-### 4.3 Sử dụng MCP có sẵn (cách dễ nhất)
+### 4.3 Using a ready-made MCP (the easiest way)
 
-**Trên Claude.ai web**:
-- Settings → Connectors → bật những cái cần (Gmail, Notion, Slack, GitHub, Linear, ...)
-- Sau đó hỏi tự nhiên: "Check Gmail có email mới từ boss không"
+**On Claude.ai web**:
+- Settings → Connectors → enable the ones you need (Gmail, Notion, Slack, GitHub, Linear, ...)
+- Then ask naturally: "Check Gmail for any new email from my boss"
 
-**Trên Claude Desktop**:
-1. Tạo file config: `~/Library/Application Support/Claude/claude_desktop_config.json` (Mac) hoặc `%APPDATA%\Claude\claude_desktop_config.json` (Windows)
-2. Cấu trúc:
+**On Claude Desktop**:
+1. Create the config file: `~/Library/Application Support/Claude/claude_desktop_config.json` (Mac) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows)
+2. Structure:
    ```json
    {
      "mcpServers": {
@@ -242,24 +242,24 @@ Ví von: MCP là **cổng USB-C cho AI**. Trước đó mỗi tool một loại 
      }
    }
    ```
-3. Restart Claude Desktop. Icon hammer 🔨 xuất hiện ở góc dưới = MCP đã load.
+3. Restart Claude Desktop. The hammer icon 🔨 appearing in the bottom corner = MCP loaded.
 
-**Trên Claude Code**:
+**On Claude Code**:
 ```bash
 claude mcp add github -- npx -y @modelcontextprotocol/server-github
 ```
 
-### 4.4 MCP servers phổ biến
+### 4.4 Popular MCP servers
 
 Pre-built: Filesystem, GitHub, GitLab, Postgres, SQLite, Slack, Google Drive, Puppeteer (browser automation), Brave Search, ...
 
-Repository chính thức: https://github.com/modelcontextprotocol/servers
+Official repository: https://github.com/modelcontextprotocol/servers
 
 Registry: https://github.com/modelcontextprotocol/registry
 
-### 4.5 Build MCP server riêng
+### 4.5 Build your own MCP server
 
-Dùng MCP SDK (Python, TypeScript). Một server đơn giản trong TypeScript:
+Use the MCP SDK (Python, TypeScript). A simple server in TypeScript:
 
 ```typescript
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
@@ -272,7 +272,7 @@ const server = new Server({ name: "my-mcp", version: "0.1.0" }, {
 server.setRequestHandler("tools/list", async () => ({
   tools: [{
     name: "get_weather",
-    description: "Lấy thời tiết hiện tại",
+    description: "Get the current weather",
     inputSchema: {
       type: "object",
       properties: { city: { type: "string" } },
@@ -284,8 +284,8 @@ server.setRequestHandler("tools/list", async () => ({
 server.setRequestHandler("tools/call", async (req) => {
   if (req.params.name === "get_weather") {
     const { city } = req.params.arguments;
-    // gọi API thời tiết...
-    return { content: [{ type: "text", text: `Thời tiết ${city}: 28°C, nắng` }] };
+    // call the weather API...
+    return { content: [{ type: "text", text: `Weather in ${city}: 28°C, sunny` }] };
   }
 });
 
@@ -293,104 +293,104 @@ const transport = new StdioServerTransport();
 await server.connect(transport);
 ```
 
-### 4.6 Cẩn trọng khi dùng MCP
+### 4.6 Cautions when using MCP
 
-- **Tốn context**: mỗi server thêm tool descriptions vào context. 7 servers × 10 tools = ~3000 tokens chỉ để Claude biết tools tồn tại. Chỉ bật cái cần.
-- **Security**: MCP server có thể access file/network. Không cài server không tin cậy. Dùng read-only credentials nếu được.
-- **Tool descriptions phải rõ**: nếu Claude không gọi tool dù bạn nghĩ nên gọi → description chưa rõ "khi nào dùng".
+- **Context cost**: each server adds tool descriptions to the context. 7 servers × 10 tools = ~3000 tokens just for Claude to know the tools exist. Only enable what you need.
+- **Security**: an MCP server can access files/network. Don't install untrusted servers. Use read-only credentials when possible.
+- **Tool descriptions must be clear**: if Claude isn't calling a tool when you think it should → the description isn't clear about "when to use it".
 
 > Docs: https://modelcontextprotocol.io
-> Course Anthropic miễn phí: https://anthropic.skilljar.com/introduction-to-model-context-protocol
+> Free Anthropic course: https://anthropic.skilljar.com/introduction-to-model-context-protocol
 
 ---
 
-## Phần 5 — Subagents: phân chia công việc trong Claude Code
+## Part 5 — Subagents: dividing work in Claude Code
 
-### 5.1 Subagent là gì
+### 5.1 What a subagent is
 
-**Tính năng của Claude Code** (không phải Claude.ai). Một subagent là một Claude instance riêng:
-- **Context window độc lập** — không thấy main conversation
-- **System prompt riêng** — chuyên biệt
-- **Tool access riêng** — có thể giới hạn (ví dụ: read-only)
-- **Có thể chạy model khác** — ví dụ subagent đơn giản dùng Haiku cho rẻ
+A **Claude Code feature** (not Claude.ai). A subagent is a separate Claude instance:
+- **Independent context window** — doesn't see the main conversation
+- **Its own system prompt** — specialized
+- **Its own tool access** — can be restricted (e.g. read-only)
+- **Can run a different model** — e.g. a simple subagent uses Haiku to save cost
 
-Kết quả trả về main conversation chỉ là **summary** của subagent — không phải toàn bộ context nó dùng.
+What gets returned to the main conversation is only a **summary** from the subagent — not the entire context it used.
 
-**Vì sao cần?** Hai lợi ích chính:
+**Why do you need it?** Two main benefits:
 
-1. **Context isolation**: search 100 files để tìm bug? Để main conversation đọc 100 files = context đầy ngay. Subagent đọc, summarize "bug ở file X dòng Y" → main conversation chỉ nhận 1 dòng.
+1. **Context isolation**: searching 100 files to find a bug? Having the main conversation read 100 files = context fills up immediately. A subagent reads, summarizes "bug in file X line Y" → the main conversation only receives one line.
 
-2. **Specialization**: subagent code-reviewer có system prompt riêng, biết style guide của bạn, focus vào quality. Subagent test-runner chỉ chạy test, không tự sửa code.
+2. **Specialization**: a code-reviewer subagent has its own system prompt, knows your style guide, focuses on quality. A test-runner subagent only runs tests and won't edit code itself.
 
-### 5.2 Built-in subagents trong Claude Code
+### 5.2 Built-in subagents in Claude Code
 
-Claude Code có sẵn 5 subagents tự động dùng:
+Claude Code comes with 5 subagents it uses automatically:
 
-| Subagent | Vai trò |
+| Subagent | Role |
 |---|---|
-| **Explore** | Search/đọc codebase. Read-only. Chạy Haiku → nhanh, rẻ |
-| **Plan** | Lên kế hoạch (khi gõ `/plan`). Read-only |
-| **General-purpose** | Task phức tạp, cần cả search + modify |
-| **Claude Code Guide** | Trả lời câu hỏi về Claude Code |
-| **statusline-setup** | Helper config terminal |
+| **Explore** | Search/read the codebase. Read-only. Runs Haiku → fast, cheap |
+| **Plan** | Plans work (when you type `/plan`). Read-only |
+| **General-purpose** | Complex tasks needing both search + modify |
+| **Claude Code Guide** | Answers questions about Claude Code |
+| **statusline-setup** | Terminal config helper |
 
-Bạn không cần làm gì — Claude Code tự gọi khi phù hợp.
+You don't need to do anything — Claude Code invokes them automatically when appropriate.
 
 ### 5.3 Custom subagents
 
-Tạo file markdown trong `.claude/agents/<name>.md` (project-level) hoặc `~/.claude/agents/<name>.md` (global):
+Create a markdown file in `.claude/agents/<name>.md` (project-level) or `~/.claude/agents/<name>.md` (global):
 
 ```markdown
 ---
 name: prisma-reviewer
-description: "MUST BE USED khi review thay đổi Prisma schema. Kiểm tra naming, indexes, relations."
+description: "MUST BE USED when reviewing Prisma schema changes. Checks naming, indexes, relations."
 tools: Read, Grep
 model: sonnet
 ---
 
-You are a Prisma schema reviewer. Khi được gọi:
+You are a Prisma schema reviewer. When invoked:
 
-1. Đọc schema.prisma được chỉ định
-2. Kiểm tra:
+1. Read the specified schema.prisma
+2. Check:
    - Models PascalCase singular
    - Fields camelCase
-   - Mọi foreign key có index
-   - onDelete đã được set khi cần
-   - Field không cần thiết tránh dùng @db.Text
-3. Trả về:
-   - ✅ Những gì OK
-   - ⚠️ Cảnh báo
-   - ❌ Lỗi cần sửa
+   - Every foreign key has an index
+   - onDelete is set when needed
+   - Avoid @db.Text on fields that don't need it
+3. Return:
+   - ✅ What's OK
+   - ⚠️ Warnings
+   - ❌ Errors that must be fixed
    
-Honest, critical, không khen suông.
+Honest, critical, no empty praise.
 ```
 
-Hoặc tạo bằng `/agents` command trong Claude Code (interactive).
+Or create it via the `/agents` command in Claude Code (interactive).
 
-### 5.4 Khi nào nên dùng subagents
+### 5.4 When to use subagents
 
-**NÊN dùng:**
-- Task search/explore trong codebase lớn
-- Bạn lặp đi lặp lại cùng 1 loại task (review code, gen test, write docs) → tạo subagent chuyên biệt
-- Cần parallel work (nhiều subagents cùng lúc)
-- Muốn isolate "messy" tasks (debug, log analysis) khỏi main conversation
+**DO use:**
+- Search/explore tasks in a large codebase
+- You repeat the same kind of task over and over (review code, gen tests, write docs) → create a specialized subagent
+- You need parallel work (multiple subagents at once)
+- You want to isolate "messy" tasks (debugging, log analysis) from the main conversation
 
-**KHÔNG nên dùng:**
-- Task đơn giản 1-2 step
-- Task cần context của main conversation (subagent KHÔNG thấy lịch sử)
-- Bạn vừa mới bắt đầu — học flow chính trước
+**DON'T use:**
+- Simple 1-2 step tasks
+- Tasks that need the main conversation's context (a subagent does NOT see the history)
+- You're just getting started — learn the main flow first
 
-### 5.5 Skills vs Subagents — phân biệt
+### 5.5 Skills vs Subagents — the distinction
 
 | | Skill | Subagent |
 |---|---|---|
-| Cài ở đâu | Claude.ai, Code, API | Claude Code only |
-| Context | Load vào main context | Tách context riêng |
-| Khi nào load | Khi task trigger description | Khi main agent quyết định delegate |
-| Chia sẻ context | Có | Không |
-| Dùng cho | Hướng dẫn/workflow + scripts | Phân chia lao động + cô lập context |
+| Where it's installed | Claude.ai, Code, API | Claude Code only |
+| Context | Loaded into the main context | Separate, isolated context |
+| When it loads | When a task triggers the description | When the main agent decides to delegate |
+| Shares context | Yes | No |
+| Used for | Guides/workflows + scripts | Division of labor + context isolation |
 
-Hai cái có thể dùng cùng nhau: subagent có thể dùng skills.
+The two can be used together: a subagent can use skills.
 
 > Docs: https://docs.claude.com/en/docs/claude-code/sub-agents
 > Course: https://anthropic.skilljar.com/introduction-to-subagents
@@ -398,80 +398,80 @@ Hai cái có thể dùng cùng nhau: subagent có thể dùng skills.
 
 ---
 
-## Phần 6 — CLAUDE.md: bộ nhớ project cho Claude Code
+## Part 6 — CLAUDE.md: project memory for Claude Code
 
-### 6.1 CLAUDE.md là gì
+### 6.1 What CLAUDE.md is
 
-File markdown đặc biệt mà **Claude Code tự đọc ở đầu mỗi session** trong project đó. Coi như "hiến pháp" của project — rules Claude phải tuân theo trong mọi conversation, mọi subagent, mọi lần bạn chạy `claude` trong folder này.
+A special markdown file that **Claude Code reads automatically at the start of every session** in that project. Think of it as the project's "constitution" — rules Claude must follow in every conversation, every subagent, every time you run `claude` in this folder.
 
-**Khác README.md:**
-- README.md → viết cho **người** (dev mới, contributor) — explain HOW
-- CLAUDE.md → viết cho **Claude** — rules ngắn gọn, actionable, WHAT TO DO / NOT DO
+**Different from README.md:**
+- README.md → written for **people** (new devs, contributors) — explains HOW
+- CLAUDE.md → written for **Claude** — short, actionable rules, WHAT TO DO / NOT DO
 
-### 6.2 Hệ thống cấp bậc (loaded theo thứ tự, specific override general)
+### 6.2 The hierarchy (loaded in order, specific overrides general)
 
 ```
-1. ~/.claude/CLAUDE.md                ← user-level (cá nhân, mọi project)
-2. <project>/CLAUDE.md                ← project root (commit vào git, share team)
-3. <project>/<subdir>/CLAUDE.md       ← subdirectory (load khi work trong subdir)
-4. <project>/CLAUDE.local.md          ← personal override cho project này (gitignore)
-5. Managed policy CLAUDE.md           ← org-wide (admin set, không bypass được)
+1. ~/.claude/CLAUDE.md                ← user-level (personal, all projects)
+2. <project>/CLAUDE.md                ← project root (committed to git, shared with team)
+3. <project>/<subdir>/CLAUDE.md       ← subdirectory (loaded when working in the subdir)
+4. <project>/CLAUDE.local.md          ← personal override for this project (gitignored)
+5. Managed policy CLAUDE.md           ← org-wide (set by admin, cannot be bypassed)
 ```
 
-Tất cả **cộng dồn** — không thay thế nhau. Specific level override general khi conflict.
+All of them **accumulate** — they don't replace each other. The specific level overrides the general one on conflict.
 
-**Trường hợp thực tế (dự án social media):**
-- Root `social-media/CLAUDE.md` — convention chung (TypeScript everywhere, Vietnamese comments)
-- `backend/CLAUDE.md` — rules Prisma, lệnh npm, patterns service/route
+**Real-world case (the social media project):**
+- Root `social-media/CLAUDE.md` — shared conventions (TypeScript everywhere, Vietnamese comments)
+- `backend/CLAUDE.md` — Prisma rules, npm commands, service/route patterns
 - `frontend/CLAUDE.md` — Tailwind rules, Zustand patterns
 
-Khi Claude vào folder `backend/` để code, nó tự load cả root + backend CLAUDE.md.
+When Claude enters the `backend/` folder to code, it loads both the root + backend CLAUDE.md.
 
-### 6.3 Nội dung nên có trong CLAUDE.md
+### 6.3 What CLAUDE.md should contain
 
-✅ **NÊN bỏ vào:**
+✅ **DO include:**
 - Build/test/lint commands (`npm run dev`, `npx prisma migrate dev`)
-- Tech stack đã chốt
+- The locked-in tech stack
 - Naming conventions (kebab-case, PascalCase, ...)
 - "Always do X" / "Never do Y" rules
-- Project structure (nhanh, link tới README cho chi tiết)
-- Anti-patterns cụ thể của project
-- Tool quirks (vd: "Prisma migration tên phải snake_case")
-- Endpoints / API contracts hiện có
+- Project structure (brief, link to README for detail)
+- Project-specific anti-patterns
+- Tool quirks (e.g. "Prisma migration names must be snake_case")
+- Existing endpoints / API contracts
 
-❌ **KHÔNG nên bỏ vào:**
-- Generic best practices Claude đã biết ("write clean code", "comment well")
-- Thứ Claude có thể tự khám phá khi đọc codebase (Claude sẽ tự nhớ qua auto-memory)
-- Documentation dài cho người — đó là job của README
-- Bí mật (API keys, passwords) — KHÔNG BAO GIỜ
-- Rule thay đổi liên tục — sẽ outdate nhanh
+❌ **DON'T include:**
+- Generic best practices Claude already knows ("write clean code", "comment well")
+- Things Claude can discover by reading the codebase (Claude will remember them via auto-memory)
+- Long documentation for people — that's README's job
+- Secrets (API keys, passwords) — NEVER
+- Rules that change constantly — they'll go stale fast
 
-### 6.4 Quy tắc 150-200 instructions
+### 6.4 The 150-200 instruction rule
 
-Mô hình AI tuân thủ tin cậy được ~150-200 distinct instructions trong context. Claude Code's system prompt đã chiếm ~50 slots. **Đừng waste lines vào platitudes.**
+AI models reliably follow ~150-200 distinct instructions in context. Claude Code's system prompt already takes ~50 slots. **Don't waste lines on platitudes.**
 
-> CLAUDE.md mô tả architecture bạn đã migrate khỏi 18 tháng trước **tệ hơn không có CLAUDE.md**. Outdated context = guidance sai mỗi lần. Prune định kỳ là maintenance bắt buộc.
+> A CLAUDE.md describing an architecture you migrated away from 18 months ago is **worse than no CLAUDE.md**. Outdated context = wrong guidance every time. Pruning periodically is mandatory maintenance.
 
 ### 6.5 Auto-memory (Claude Code v2.1.59+)
 
-Claude Code mới có thêm tính năng **auto-memory**: Claude tự ghi chú learnings ra `~/.claude/projects/<project>/memory/` qua nhiều session. Bạn không cần viết — Claude tự lưu khi thấy info đáng nhớ (build command, naming pattern, gotcha).
+Newer Claude Code adds an **auto-memory** feature: Claude writes notes about its learnings to `~/.claude/projects/<project>/memory/` across sessions. You don't have to write them — Claude saves them itself when it spots something worth remembering (build command, naming pattern, gotcha).
 
-**Hệ quả:** CLAUDE.md chỉ cần chứa cái **bạn biết Claude SẼ KHÔNG tự khám phá** (rules nghiêm cấm, decision cố ý). Cái Claude có thể tự học → để auto-memory.
+**Consequence:** CLAUDE.md only needs to contain what **you know Claude WON'T discover on its own** (hard prohibitions, deliberate decisions). What Claude can learn for itself → leave to auto-memory.
 
-Lệnh `/memory` trong session để xem Claude đã nhớ gì.
+Use the `/memory` command in a session to see what Claude has remembered.
 
-### 6.6 CLAUDE.md skeleton (copy được)
+### 6.6 CLAUDE.md skeleton (copy-ready)
 
 ```markdown
 # [Project Name] — Project Memory
 
 ## Project identity
-[1-2 câu mô tả: làm gì, cho ai, stage nào]
+[1-2 sentences: what it does, who it's for, what stage]
 
 ## Tech stack (immutable)
-- [list cụ thể, có version nếu quan trọng]
+- [specific list, with versions if it matters]
 
-## Lệnh hay dùng
+## Common commands
 ```
 npm run dev
 npx prisma migrate dev
@@ -483,65 +483,65 @@ docker compose up -d
 - Code organization: ...
 - Git workflow: ...
 
-## Anti-patterns — KHÔNG làm
+## Anti-patterns — DO NOT do
 - ❌ ...
 - ❌ ...
 
-## Ngữ cảnh sâu hơn
-Xem `README.md`, `ARCHITECTURE.md` cho chi tiết.
+## Deeper context
+See `README.md`, `ARCHITECTURE.md` for details.
 ```
 
 ### 6.7 Common mistakes
 
-1. **Viết CLAUDE.md như README** — dài dòng, prose-style. Claude follow rule cụ thể tốt hơn paragraph văn vẻ.
-2. **Quên prune** — feature đã bỏ, stack đã đổi mà CLAUDE.md vẫn đề cập.
-3. **Không có ở subfolder** — monorepo mà chỉ có 1 CLAUDE.md root → context quá rộng.
-4. **Trùng auto-memory** — viết lại thứ Claude đã tự nhớ.
-5. **Không commit** — đáng lẽ share team, mà để mỗi người 1 phiên bản → không nhất quán.
+1. **Writing CLAUDE.md like a README** — verbose, prose-style. Claude follows specific rules better than flowery paragraphs.
+2. **Forgetting to prune** — a feature that was dropped, a stack that changed, but CLAUDE.md still mentions it.
+3. **No subfolder version** — a monorepo with only one root CLAUDE.md → the context is too broad.
+4. **Duplicating auto-memory** — rewriting what Claude already remembered on its own.
+5. **Not committing** — it should be shared with the team, but each person keeps their own version → inconsistency.
 
-### 6.8 CLAUDE.md vs Skills vs Subagents — phân biệt
+### 6.8 CLAUDE.md vs Skills vs Subagents — the distinction
 
 | | CLAUDE.md | Skills | Subagents |
 |---|---|---|---|
-| Phạm vi | Tự động mọi session trong folder | Trigger theo task description | Khi main agent quyết delegate |
-| Format | Markdown rules | Folder + SKILL.md + scripts | Markdown với YAML frontmatter |
-| Context | Load vào main context | Load on-demand | Tách context riêng |
-| Tốt cho | Project rules, conventions | Workflow lặp lại, có thể bundle code | Phân chia lao động, task isolation |
-| Available ở | Claude Code | Claude.ai, Code, API | Claude Code, API SDK |
+| Scope | Automatic every session in the folder | Triggered by task description | When the main agent decides to delegate |
+| Format | Markdown rules | Folder + SKILL.md + scripts | Markdown with YAML frontmatter |
+| Context | Loaded into the main context | Loaded on-demand | Separate, isolated context |
+| Good for | Project rules, conventions | Repeated workflows, can bundle code | Division of labor, task isolation |
+| Available in | Claude Code | Claude.ai, Code, API | Claude Code, API SDK |
 
-3 cái dùng được cùng nhau. Ví dụ: CLAUDE.md set conventions chung → subagent "prisma-reviewer" inherit rules → khi review schema dùng skill "prisma-schema-update" với scripts.
+All three can be used together. Example: CLAUDE.md sets shared conventions → the "prisma-reviewer" subagent inherits the rules → when reviewing a schema it uses the "prisma-schema-update" skill with scripts.
 
-> Docs chính thức: https://docs.claude.com/en/docs/claude-code/memory
+> Official docs: https://docs.claude.com/en/docs/claude-code/memory
 
 ---
 
-## Phần 7 — Prompt engineering: 7 nguyên tắc dùng được ngay
+## Part 7 — Prompt engineering: 7 principles you can use right now
 
-### 6.1 Cụ thể đến mức KHÓ HIỂU SAI
+### 6.1 Be specific to the point of being HARD TO MISREAD
 
-❌ "Sửa cho nó đẹp hơn"
-✅ "Giảm padding của PostCard từ 24px xuống 16px, đổi màu accent từ đỏ sang xanh dương #2563EB, giữ font Fraunces"
+❌ "Make it look nicer"
+✅ "Reduce PostCard's padding from 24px to 16px, change the accent color from red to blue #2563EB, keep the Fraunces font"
 
-### 6.2 Cho ví dụ đầu vào / đầu ra (few-shot)
+### 6.2 Give input / output examples (few-shot)
 
 ```
-Convert tên file sang PascalCase:
+Convert file names to PascalCase:
 - user-profile.tsx → UserProfile.tsx
 - new-post-modal.tsx → NewPostModal.tsx
 - comment-tree.tsx → ?
 ```
 
-Claude thấy pattern → output đúng format.
+Claude sees the pattern → outputs the correct format.
 
-### 6.3 Dùng XML tags cho structure phức tạp
+### 6.3 Use XML tags for complex structure
 
 ```
-<task>Refactor function dưới đây</task>
+<task>Refactor the function below</task>
 
 <requirements>
-- Đổi sang TypeScript
-- Thêm error handling
-- Giữ nguyên signature
+- Convert to TypeScript
+- Add error handling
+- Keep the signature
 </requirements>
 
 <code>
@@ -549,77 +549,77 @@ function doStuff(x) { ... }
 </code>
 ```
 
-Claude parse XML tốt hơn markdown khi prompt phức tạp.
+Claude parses XML better than markdown when the prompt is complex.
 
 ### 6.4 "Think step by step" / Chain of thought
 
-Với task suy luận phức tạp:
-- "Trước khi viết code, hãy phân tích: input là gì, output mong muốn, edge cases."
+For complex reasoning tasks:
+- "Before writing code, analyze: what's the input, the desired output, the edge cases."
 
-Hoặc dùng feature `extended thinking` của Claude — model "nghĩ" trước khi trả lời.
+Or use Claude's `extended thinking` feature — the model "thinks" before answering.
 
-### 6.5 Gán role rõ ràng
+### 6.5 Assign a clear role
 
-❌ "Review code này"
-✅ "Bạn là senior backend engineer review code junior. Tập trung vào: security, performance, maintainability. Honest, không khen suông."
+❌ "Review this code"
+✅ "You are a senior backend engineer reviewing a junior's code. Focus on: security, performance, maintainability. Honest, no empty praise."
 
-### 6.6 Negative examples — chỉ ra gì KHÔNG muốn
+### 6.6 Negative examples — point out what you DON'T want
 
-"Tạo landing page B2B SaaS. KHÔNG dùng: gradient tím-xanh, font Inter, từ 'revolutionary' hoặc 'cutting-edge', icon emoji."
+"Create a B2B SaaS landing page. DON'T use: purple-blue gradients, the Inter font, the words 'revolutionary' or 'cutting-edge', emoji icons."
 
-### 6.7 Iterate, đừng kỳ vọng one-shot
+### 6.7 Iterate, don't expect one-shot
 
-Đặc biệt với UI/design: prompt 1 ra phiên bản v0.1. Bạn xem, feedback cụ thể. Prompt 2 ra v0.2. Lặp 3-5 lần. Đó là quy trình bình thường, không phải prompt "kém".
+Especially with UI/design: prompt 1 produces a v0.1. You look, give specific feedback. Prompt 2 produces v0.2. Repeat 3-5 times. That's the normal process, not a "bad" prompt.
 
 ---
 
-## Phần 8 — Workflows thực tế
+## Part 8 — Real-world workflows
 
-### Khi build dự án (như social media này)
+### When building a project (like this social media app)
 
-| Tình huống | Tool tốt nhất |
+| Situation | Best tool |
 |---|---|
-| Lên kế hoạch, design, thảo luận | Claude.ai (web) |
-| Code thực tế trong project | Claude Code (CLI trong folder project) |
-| Connect Postgres để Claude query DB | Claude Code + MCP postgres server |
-| Review PR, tạo test, gen docs lặp đi lặp lại | Claude Code + custom subagents |
-| Quy ước project (commit format, schema rules) | Skills + Project instructions |
-| Build feature có AI vào sản phẩm | Claude API |
+| Planning, design, discussion | Claude.ai (web) |
+| Actual coding in the project | Claude Code (CLI in the project folder) |
+| Connect Postgres so Claude can query the DB | Claude Code + MCP postgres server |
+| Review PRs, generate tests, gen docs repeatedly | Claude Code + custom subagents |
+| Project conventions (commit format, schema rules) | Skills + Project instructions |
+| Build a feature that brings AI into the product | Claude API |
 
-### Workflow đề xuất cho dự án social media
+### Suggested workflow for the social media project
 
 ```
-1. Plan ở Claude.ai      → tạo ARCHITECTURE.md
-2. Switch sang Claude Code in folder
-3. Tạo .claude/agents/ với:
+1. Plan in Claude.ai     → create ARCHITECTURE.md
+2. Switch to Claude Code in the folder
+3. Create .claude/agents/ with:
    - prisma-reviewer       (review schema changes)
    - api-tester            (gen curl tests)
-   - migration-helper      (đẹp hơn câu lệnh prisma)
-4. Tạo .claude/skills/ với:
+   - migration-helper      (nicer than raw prisma commands)
+4. Create .claude/skills/ with:
    - commit-style          (Conventional Commits)
-   - vietnamese-comments   (force comment tiếng Việt)
-5. MCP postgres server → Claude tự query DB khi debug
-6. MCP github server → Claude tạo PR, review issues
+   - vietnamese-comments   (force Vietnamese comments)
+5. MCP postgres server → Claude queries the DB itself when debugging
+6. MCP github server → Claude creates PRs, reviews issues
 ```
 
-### Anti-patterns hay thấy
+### Common anti-patterns
 
-❌ **Hỏi Claude một thứ rồi phản bác mỗi câu trả lời.** Claude không thiên vị — bạn đang dạy nó "đáp án bạn muốn". Tốt hơn: prompt rõ tiêu chí, để Claude tự reason.
+❌ **Asking Claude something then pushing back on every answer.** Claude isn't biased — you're teaching it "the answer you want". Better: state your criteria clearly and let Claude reason on its own.
 
-❌ **Paste cả file 5000 dòng + "fix bug giúp tôi".** Reduce context: "Bug ở function X, line 200-250. Toàn file đính kèm để tham khảo."
+❌ **Pasting a whole 5000-line file + "fix the bug for me".** Reduce context: "The bug is in function X, lines 200-250. The full file is attached for reference."
 
-❌ **Cho Claude full quyền mà không kiểm tra.** Đặc biệt với MCP/Code — luôn review trước khi run command nguy hiểm.
+❌ **Giving Claude full permissions without checking.** Especially with MCP/Code — always review before running a dangerous command.
 
-❌ **Dùng Claude.ai cho mọi thứ.** Code project? Claude Code tốt hơn. Connect tools? MCP. Long codebase? Subagents.
+❌ **Using Claude.ai for everything.** Coding a project? Claude Code is better. Connecting tools? MCP. Long codebase? Subagents.
 
 ---
 
-## Phần 9 — Tài liệu official đáng đọc
+## Part 9 — Official docs worth reading
 
-**Bắt buộc đọc nếu serious về Claude:**
+**Must-read if you're serious about Claude:**
 - Anthropic Cookbook: https://github.com/anthropics/anthropic-cookbook (hands-on examples)
 - Prompt Engineering Guide: https://docs.claude.com/en/docs/build-with-claude/prompt-engineering/overview
-- Building Effective Agents (post chính thức): https://www.anthropic.com/research/building-effective-agents
+- Building Effective Agents (official post): https://www.anthropic.com/research/building-effective-agents
 
 **Reference docs:**
 - Claude API: https://docs.claude.com
@@ -628,53 +628,53 @@ Hoặc dùng feature `extended thinking` của Claude — model "nghĩ" trước
 - MCP: https://modelcontextprotocol.io
 - Subagents: https://docs.claude.com/en/docs/claude-code/sub-agents
 
-**Courses miễn phí (Anthropic Academy):**
-- https://anthropic.skilljar.com — có courses về prompt engineering, MCP, subagents, tool use
+**Free courses (Anthropic Academy):**
+- https://anthropic.skilljar.com — has courses on prompt engineering, MCP, subagents, tool use
 
-**Cộng đồng:**
-- Anthropic Discord: link trong docs
+**Community:**
+- Anthropic Discord: link in the docs
 - r/ClaudeAI subreddit
 - GitHub anthropics/skills, modelcontextprotocol/servers
 
 ---
 
-## Phần 10 — Lộ trình học gợi ý cho bạn
+## Part 10 — A suggested learning path for you
 
-Cho người mới như bạn (đang build social media + học AI engineering):
+For a beginner like you (building social media + learning AI engineering):
 
-**Tuần 1-2: Foundations**
-- Đọc xong tài liệu này
-- Quen với Claude.ai: project, instructions, artifacts
-- Hoàn thành Phase 1 backend (đã có)
-- Đọc prompt engineering docs
+**Weeks 1-2: Foundations**
+- Finish reading this document
+- Get comfortable with Claude.ai: projects, instructions, artifacts
+- Complete Phase 1 backend (already done)
+- Read the prompt engineering docs
 
-**Tuần 3-4: Claude Code**
-- Cài Claude Code, dùng cho phase 2 của project (posts core)
-- Tạo 1-2 custom skill cho project (commit style, naming)
-- Quen với plan mode (`/plan`), explore agent
+**Weeks 3-4: Claude Code**
+- Install Claude Code, use it for the project's phase 2 (posts core)
+- Create 1-2 custom skills for the project (commit style, naming)
+- Get comfortable with plan mode (`/plan`), the explore agent
 
-**Tuần 5-6: MCP**
-- Cài Claude Desktop + filesystem MCP
-- Cài Postgres MCP cho project — Claude query DB trực tiếp
-- Đọc MCP course Anthropic
+**Weeks 5-6: MCP**
+- Install Claude Desktop + filesystem MCP
+- Install Postgres MCP for the project — Claude queries the DB directly
+- Take Anthropic's MCP course
 
-**Tuần 7-8: Subagents**
-- Tạo 2-3 custom subagents (reviewer, test-gen, doc-gen)
-- Học khi nào delegate, khi nào không
-- Đọc subagents course
+**Weeks 7-8: Subagents**
+- Create 2-3 custom subagents (reviewer, test-gen, doc-gen)
+- Learn when to delegate and when not to
+- Take the subagents course
 
-**Tuần 9+: Build with API**
-- Khi project social media tới phase tích hợp AI features (auto caption, content moderation)
-- Học function calling, structured outputs, tool use
+**Week 9+: Build with the API**
+- When the social media project reaches the phase of integrating AI features (auto caption, content moderation)
+- Learn function calling, structured outputs, tool use
 
 ---
 
 ## Closing thought
 
-Quan trọng nhất khi làm AI engineer với Claude **không phải** memo hết features. Là biết:
+The most important thing as an AI engineer working with Claude is **not** memorizing every feature. It's knowing:
 
-1. **Khi nào** dùng feature gì — context isolation cần subagent, workflow lặp lại cần skill, data ngoài cần MCP
-2. **Cách shape behavior** qua context — vì bạn không fine-tune model, mọi thứ là prompt + skills + system + tools
-3. **Iterate & verify** — Claude sai thường xuyên, đặc biệt với task phức tạp. Một engineer giỏi không tin Claude mù quáng
+1. **When** to use which feature — context isolation needs a subagent, a repeated workflow needs a skill, external data needs MCP
+2. **How to shape behavior** through context — since you don't fine-tune the model, everything is prompt + skills + system + tools
+3. **Iterate & verify** — Claude gets things wrong frequently, especially on complex tasks. A good engineer doesn't trust Claude blindly
 
-Mọi thứ khác chỉ là tool. Mental model đúng → chọn tool đúng → ra kết quả tốt.
+Everything else is just a tool. The right mental model → the right tool choice → good results.
