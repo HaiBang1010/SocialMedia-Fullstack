@@ -425,6 +425,18 @@ export interface MessageDeletedPayload {
   deletedAt: string; // ISO
 }
 
+// Group management socket payloads.
+export interface ConversationMemberAddedPayload {
+  conversationId: string;
+  addedUserIds: string[];
+}
+
+export interface ConversationMemberLeftPayload {
+  conversationId: string;
+  userId: string;
+  deleted: boolean; // true = the group was emptied + deleted
+}
+
 // Phase 6 — call socket payloads (LiveKit handles WebRTC; these are thin notifications).
 // call:incoming → recipients (ring + IncomingCallDialog).
 export interface CallIncomingPayload {
@@ -669,6 +681,11 @@ export interface CreateDirectInput {
 export interface CreateGroupInput {
   participantIds: string[];
   name?: string;
+}
+
+// POST /conversations/:id/members — add members to a group (open permission).
+export interface AddMembersInput {
+  userIds: string[];
 }
 
 // Cursor pagination query params, shared by all list endpoints.

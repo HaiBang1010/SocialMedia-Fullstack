@@ -132,6 +132,34 @@ export function emitCallEnded(
   }
 }
 
+// ── Group management — member add / leave. Same user-room fan-out as the others; clients
+// invalidate their conversation list (+ detail) so membership changes show without a refresh.
+
+/** A member (or several) was added to a group. `participantIds` = the post-add roster, so the
+ *  newly-added members get it too and the group appears in their list with the thread closed. */
+export function emitMemberAdded(
+  participantIds: string[],
+  payload: { conversationId: string; addedUserIds: string[] },
+): void {
+  if (!io) return;
+  for (const userId of participantIds) {
+    io.to(userRoom(userId)).emit('conversation:member-added', payload);
+  }
+}
+
+/** A member left a group. `deleted` = the group was emptied + deleted. `participantIds` should be
+ *  the remaining members + the leaver (so the leaver's other tabs drop it); for a deleted group
+ *  only the leaver remains to notify. */
+export function emitMemberLeft(
+  participantIds: string[],
+  payload: { conversationId: string; userId: string; deleted: boolean },
+): void {
+  if (!io) return;
+  for (const userId of participantIds) {
+    io.to(userRoom(userId)).emit('conversation:member-left', payload);
+  }
+}
+
 /** Tell a user's conversation-partners that they just came online (D2: contact-scoped). */
 export function emitPresenceOnline(userId: string, partnerIds: string[]): void {
   if (!io) return;

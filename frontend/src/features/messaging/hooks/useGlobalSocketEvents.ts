@@ -8,7 +8,11 @@ import { useActiveConversationStore } from '@/stores/activeConversationStore';
 import { getSocket } from '@/lib/socket';
 import { queryKeys } from '@/lib/queryKeys';
 import { insertIncomingMessage, patchMessageReactions, patchMessageDeleted } from '@/lib/messageCache';
-import { patchConversationOnNewMessage, incrementConversationUnread } from '@/lib/conversationCache';
+import {
+  patchConversationOnNewMessage,
+  incrementConversationUnread,
+  removeConversationFromList,
+} from '@/lib/conversationCache';
 import { prependNotification } from '@/lib/notificationCache';
 import { formatMessagePreview } from '@/lib/messagePreview';
 import { notificationActionText, notificationLink } from '@/lib/notificationDisplay';
@@ -18,6 +22,8 @@ import type {
   MessageNewPayload,
   MessageReactionPayload,
   MessageDeletedPayload,
+  ConversationMemberAddedPayload,
+  ConversationMemberLeftPayload,
   NotificationNewPayload,
   PresenceOfflinePayload,
   PresenceOnlinePayload,
@@ -86,6 +92,23 @@ export function useGlobalSocketEvents() {
       qc.invalidateQueries({ queryKey: queryKeys.conversations() });
     };
 
+    // Group management — members changed. Refresh the list (a new member sees the group appear;
+    // existing members' previews/names may shift) + the detail (participant roster). When I left
+    // from another tab (or the group was deleted), drop it from my caches entirely.
+    const onMemberAdded = (p: ConversationMemberAddedPayload) => {
+      qc.invalidateQueries({ queryKey: queryKeys.conversations() });
+      qc.invalidateQueries({ queryKey: queryKeys.conversation(p.conversationId) });
+    };
+    const onMemberLeft = (p: ConversationMemberLeftPayload) => {
+      const meId = useAuthStore.getState().user?.id;
+      if (p.deleted || p.userId === meId) {
+        removeConversationFromList(qc, p.conversationId);
+        return;
+      }
+      qc.invalidateQueries({ queryKey: queryKeys.conversations() });
+      qc.invalidateQueries({ queryKey: queryKeys.conversation(p.conversationId) });
+    };
+
     // Phase 7 — a new (or 1h-bumped) social notification: prepend to the list + refresh the badge
     // count (authoritative — a bump may not change it). NO sound (visual/badge only — sound is for
     // messages); a backgrounded-tab browser notification still fires, with the full action in the
@@ -107,6 +130,8 @@ export function useGlobalSocketEvents() {
     socket.on('message:new', onMessageNew);
     socket.on('message:reaction', onReaction);
     socket.on('message:deleted', onDeleted);
+    socket.on('conversation:member-added', onMemberAdded);
+    socket.on('conversation:member-left', onMemberLeft);
     socket.on('notification:new', onNotificationNew);
 
     return () => {
@@ -116,6 +141,8 @@ export function useGlobalSocketEvents() {
       socket.off('message:new', onMessageNew);
       socket.off('message:reaction', onReaction);
       socket.off('message:deleted', onDeleted);
+      socket.off('conversation:member-added', onMemberAdded);
+      socket.off('conversation:member-left', onMemberLeft);
       socket.off('notification:new', onNotificationNew);
     };
   }, [qc, status, navigate, playSound, notify]);

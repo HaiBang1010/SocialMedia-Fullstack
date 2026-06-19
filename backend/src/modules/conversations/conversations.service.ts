@@ -3,6 +3,7 @@ import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/error';
 import { publicUserSelect } from '../users/users.service';
 import { serializeMessage } from '../messages/messages.service';
+import { emitMemberAdded, emitMemberLeft } from '../../socket/io';
 import type { CreateGroupInput } from './conversations.schema';
 import type { PaginationInput } from '../posts/posts.schema';
 
@@ -257,4 +258,84 @@ export async function getConversation(conversationId: string, userId: string) {
     throw new AppError(404, 'ConversationNotFound', 'Conversation not found');
   }
   return serializeConversation(convo);
+}
+
+/**
+ * Add members to a GROUP conversation (open permission — any member can add anyone). Requester
+ * must be a member (else 404, existence hidden). DIRECT → 400. Self / existing / non-existent ids
+ * are filtered out silently (idempotent + race-safe via createMany skipDuplicates). Returns the
+ * updated conversation and fans `conversation:member-added` to every (post-add) participant's
+ * user room so the group appears in new members' lists even with the thread closed.
+ */
+export async function addMembers(conversationId: string, userIds: string[], requesterId: string) {
+  const convo = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    select: { type: true, participants: { select: { userId: true } } },
+  });
+  if (!convo || !convo.participants.some((p) => p.userId === requesterId)) {
+    throw new AppError(404, 'ConversationNotFound', 'Conversation not found');
+  }
+  if (convo.type !== 'GROUP') {
+    throw new AppError(400, 'CannotAddToDirect', 'You can only add members to a group conversation');
+  }
+
+  const existing = new Set(convo.participants.map((p) => p.userId));
+  const requested = [...new Set(userIds)].filter((id) => id !== requesterId && !existing.has(id));
+
+  let addedIds: string[] = [];
+  if (requested.length > 0) {
+    const found = await prisma.user.findMany({
+      where: { id: { in: requested } },
+      select: { id: true },
+    });
+    addedIds = found.map((u) => u.id);
+    if (addedIds.length > 0) {
+      await prisma.participant.createMany({
+        data: addedIds.map((uid) => ({ conversationId, userId: uid, isAdmin: false })),
+        skipDuplicates: true,
+      });
+    }
+  }
+
+  const updated = await getConversation(conversationId, requesterId);
+  if (addedIds.length > 0) {
+    emitMemberAdded(
+      updated.participants.map((p) => p.user.id),
+      { conversationId, addedUserIds: addedIds },
+    );
+  }
+  return updated;
+}
+
+/**
+ * Leave a GROUP conversation (anyone can leave). Member-only (else 404); DIRECT → 400. Deletes the
+ * leaver's Participant row. If they were the LAST member, the whole conversation is deleted
+ * (cascade removes participants/messages/media/reactions/calls — no zombie groups). Emits
+ * `conversation:member-left` to the remaining members + the leaver's own other tabs.
+ */
+export async function leaveConversation(conversationId: string, userId: string): Promise<void> {
+  const convo = await prisma.conversation.findUnique({
+    where: { id: conversationId },
+    select: { type: true, participants: { select: { userId: true } } },
+  });
+  if (!convo || !convo.participants.some((p) => p.userId === userId)) {
+    throw new AppError(404, 'ConversationNotFound', 'Conversation not found');
+  }
+  if (convo.type !== 'GROUP') {
+    throw new AppError(400, 'CannotLeaveDirect', 'You can only leave a group conversation');
+  }
+
+  const allIds = convo.participants.map((p) => p.userId); // pre-delete (includes the leaver)
+  await prisma.participant.delete({
+    where: { conversationId_userId: { conversationId, userId } },
+  });
+
+  if (allIds.length <= 1) {
+    // Last member out → delete the group + cascade everything (no zombie groups).
+    await prisma.conversation.delete({ where: { id: conversationId } });
+    emitMemberLeft([userId], { conversationId, userId, deleted: true });
+  } else {
+    // Notify remaining members (detail/list refresh) + the leaver's own other tabs.
+    emitMemberLeft(allIds, { conversationId, userId, deleted: false });
+  }
 }

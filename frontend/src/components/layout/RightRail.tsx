@@ -1,8 +1,14 @@
-import { useSuggestedUsers } from '@/features/users/hooks/useSuggestedUsers';
-import SuggestedUserCard from '@/components/users/SuggestedUserCard';
-import { Skeleton } from '@/components/ui/skeleton';
+import { useSuggestedUsers } from "@/features/users/hooks/useSuggestedUsers";
+import SuggestedUserCard from "@/components/users/SuggestedUserCard";
+import { Skeleton } from "@/components/ui/skeleton";
 
-const FOOTER_LINKS = ['About', 'Help', 'Privacy', 'Terms', 'Language'];
+// Static footer labels + the one real external link (Feedback → Google Form).
+const FOOTER_LINKS: { label: string; href?: string }[] = [
+  { label: "About", href: "https://www.linkedin.com/in/tphbang/" },
+  { label: "Feedback", href: "https://forms.gle/pSELEVa8TFVXpo2v8" },
+  { label: "GitHub", href: "https://github.com/HaiBang1010" },
+  { label: "Portfolio", href: "https://portfolio-psi-rosy-hx6fl8dojd.vercel.app/" },
+];
 
 // Desktop right column (lg+). Real suggested accounts (top 5 of the shared suggested-users query)
 // + a static footer. Hidden on smaller screens; the empty-feed grid covers discovery there.
@@ -12,7 +18,9 @@ export default function RightRail() {
 
   return (
     <aside className="hidden w-72 shrink-0 border-l px-6 py-8 lg:block">
-      <span className="text-sm font-semibold text-muted-foreground">Suggested for you</span>
+      <span className="text-sm font-semibold text-muted-foreground">
+        Suggested for you
+      </span>
 
       {isLoading ? (
         <ul className="mt-4 flex flex-col gap-3">
@@ -40,11 +48,23 @@ export default function RightRail() {
 
       <footer className="mt-8 flex flex-col gap-3 text-xs text-muted-foreground">
         <nav className="flex flex-wrap gap-x-2 gap-y-1">
-          {FOOTER_LINKS.map((link) => (
-            <span key={link} className="opacity-70">
-              {link}
-            </span>
-          ))}
+          {FOOTER_LINKS.map((link) =>
+            link.href ? (
+              <a
+                key={link.label}
+                href={link.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="opacity-70 transition-opacity hover:opacity-100 hover:underline"
+              >
+                {link.label}
+              </a>
+            ) : (
+              <span key={link.label} className="opacity-70">
+                {link.label}
+              </span>
+            ),
+          )}
         </nav>
         <span>© 2026 Beng</span>
       </footer>

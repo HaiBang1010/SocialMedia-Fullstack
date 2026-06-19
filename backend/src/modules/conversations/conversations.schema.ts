@@ -19,6 +19,15 @@ export const createGroupSchema = z.object({
   name: z.string().min(1).max(100).optional(),
 });
 
+/**
+ * Add members to an existing GROUP conversation (Group management — open permission: any
+ * member can add anyone). Server filters self / existing / non-existent ids silently (idempotent),
+ * so the array is just "who you'd like to add". 1..20 per call.
+ */
+export const addMembersSchema = z.object({
+  userIds: z.array(z.string().min(1)).min(1).max(20),
+});
+
 // ── Response shapes (cho OpenAPI doc) ──
 export const participantResponseSchema = z.object({
   user: publicUserResponseSchema,
@@ -52,3 +61,4 @@ export const conversationListResponseSchema = z.object({
 
 export type CreateDirectInput = z.infer<typeof createDirectSchema>;
 export type CreateGroupInput = z.infer<typeof createGroupSchema>;
+export type AddMembersInput = z.infer<typeof addMembersSchema>;

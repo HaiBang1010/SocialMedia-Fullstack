@@ -14,6 +14,7 @@ import { conversationDisplay } from '@/features/messaging/conversationDisplay';
 import MessageThread from './MessageThread';
 import MessageInput from './MessageInput';
 import CallButtons from '@/components/calls/CallButtons';
+import ConversationHeaderMenu from './ConversationHeaderMenu';
 import type { ReplyPreview } from '@/types/api';
 
 interface ConversationDetailProps {
@@ -114,6 +115,8 @@ export default function ConversationDetail({ conversationId }: ConversationDetai
         {conversation && (
           <CallButtons conversationId={conversationId} isGroup={conversation.type === 'GROUP'} />
         )}
+        {/* Group management — add members / leave (GROUP only; DIRECT shows nothing). */}
+        {conversation?.type === 'GROUP' && <ConversationHeaderMenu conversation={conversation} />}
       </header>
 
       {showCallBanner && activeCall && conversation && (

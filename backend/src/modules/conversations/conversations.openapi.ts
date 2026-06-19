@@ -3,6 +3,7 @@ import type { OpenAPIRegistry } from '@asteasolutions/zod-to-openapi';
 import {
   createDirectSchema,
   createGroupSchema,
+  addMembersSchema,
   conversationResponseSchema,
   conversationListResponseSchema,
   unreadTotalResponseSchema,
@@ -24,6 +25,7 @@ export function registerConversationsOpenApi(registry: OpenAPIRegistry) {
   const CreateDirectReq = registry.register('CreateDirectConversationRequest', createDirectSchema);
   const CreateGroupReq = registry.register('CreateGroupConversationRequest', createGroupSchema);
   const UnreadTotal = registry.register('ConversationUnreadTotal', unreadTotalResponseSchema);
+  const AddMembersReq = registry.register('AddMembersRequest', addMembersSchema);
   const idParam = z.object({ id: z.string() });
 
   registry.registerPath({
@@ -79,6 +81,37 @@ export function registerConversationsOpenApi(registry: OpenAPIRegistry) {
     responses: {
       200: { description: 'Unread total', ...json(UnreadTotal) },
       401: unauthorized401,
+    },
+  });
+
+  registry.registerPath({
+    method: 'post',
+    path: '/conversations/{id}/members',
+    tags: ['Conversations'],
+    summary: 'Add members to a group (open permission — any member)',
+    description: 'Self / existing / non-existent ids are filtered silently. DIRECT → 400.',
+    security: [{ bearerAuth: [] }],
+    request: { params: idParam, body: json(AddMembersReq) },
+    responses: {
+      200: { description: 'Updated conversation', ...json(Conversation) },
+      400: { description: 'Not a group conversation', ...json(errorResponseSchema) },
+      401: unauthorized401,
+      404: notFound404,
+    },
+  });
+
+  registry.registerPath({
+    method: 'delete',
+    path: '/conversations/{id}/members/me',
+    tags: ['Conversations'],
+    summary: 'Leave a group (last member out → group deleted)',
+    security: [{ bearerAuth: [] }],
+    request: { params: idParam },
+    responses: {
+      204: { description: 'Left the group' },
+      400: { description: 'Not a group conversation', ...json(errorResponseSchema) },
+      401: unauthorized401,
+      404: notFound404,
     },
   });
 

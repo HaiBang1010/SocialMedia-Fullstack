@@ -124,6 +124,27 @@ export function resetConversationUnread(qc: QueryClient, conversationId: string)
 }
 
 /**
+ * Group management — drop a conversation from the list cache + evict its detail/messages caches
+ * (the viewer left the group, or it was deleted when the last member left). Local removal so the
+ * list updates with no refetch; removeQueries clears the now-dead single-conversation + messages
+ * caches so a stale thread can't render.
+ */
+export function removeConversationFromList(qc: QueryClient, conversationId: string): void {
+  qc.setQueryData<InfiniteData<ConversationListResponse>>(queryKeys.conversations(), (data) => {
+    if (!data) return data;
+    return {
+      ...data,
+      pages: data.pages.map((page) => ({
+        ...page,
+        conversations: page.conversations.filter((c) => c.id !== conversationId),
+      })),
+    };
+  });
+  qc.removeQueries({ queryKey: queryKeys.conversation(conversationId) });
+  qc.removeQueries({ queryKey: queryKeys.messages(conversationId) });
+}
+
+/**
  * Apply a read receipt: set the given participant's lastReadMessageId on the single conversation
  * cache, which drives the "Seen" indicator in the open thread.
  */

@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import RightRail from './RightRail';
 import BottomNav from './BottomNav';
@@ -22,9 +22,14 @@ export default function AppLayout() {
   // Phase 6 — bind call:incoming / call:declined / call:ended (call message rides message:new).
   useIncomingCallListener();
 
+  // Messaging routes use the collapsed (hover-expand overlay) sidebar to give the thread
+  // more room; every other route keeps the full sidebar.
+  const { pathname } = useLocation();
+  const sidebarVariant = pathname.startsWith('/messages') ? 'collapsed' : 'default';
+
   return (
     <div className="flex h-screen bg-background text-foreground">
-      <Sidebar />
+      <Sidebar variant={sidebarVariant} />
       {/* pb-16 keeps content clear of the fixed BottomNav on mobile. */}
       <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
         <Outlet />

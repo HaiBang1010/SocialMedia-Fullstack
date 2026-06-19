@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { requireAuth } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { asyncHandler } from '../../middleware/asyncHandler';
-import { createDirectSchema, createGroupSchema } from './conversations.schema';
+import { createDirectSchema, createGroupSchema, addMembersSchema } from './conversations.schema';
 import { sendMessageSchema } from '../messages/messages.schema';
 import { paginationSchema } from '../posts/posts.schema';
 import * as conversationsService from './conversations.service';
@@ -92,6 +92,37 @@ router.post(
   asyncHandler(async (req, res) => {
     const message = await messagesService.sendMessage(req.params.id, req.user!.id, req.body);
     res.status(201).json(message);
+  }),
+);
+
+/**
+ * POST /conversations/:id/members — add members to a group (open permission: any member).
+ * Member-only → 404 else; DIRECT → 400. Returns the updated conversation.
+ */
+router.post(
+  '/:id/members',
+  requireAuth,
+  validate(addMembersSchema),
+  asyncHandler(async (req, res) => {
+    const convo = await conversationsService.addMembers(
+      req.params.id,
+      req.body.userIds,
+      req.user!.id,
+    );
+    res.json(convo);
+  }),
+);
+
+/**
+ * DELETE /conversations/:id/members/me — leave a group (anyone). Last member out → group deleted
+ * (cascade). Member-only → 404 else; DIRECT → 400. `me` is a literal segment (no param collision).
+ */
+router.delete(
+  '/:id/members/me',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    await conversationsService.leaveConversation(req.params.id, req.user!.id);
+    res.status(204).send();
   }),
 );
 

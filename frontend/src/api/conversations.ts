@@ -1,5 +1,6 @@
 import { apiClient } from './client';
 import type {
+  AddMembersInput,
   Conversation,
   ConversationListResponse,
   CreateDirectInput,
@@ -55,5 +56,16 @@ export const conversationsApi = {
   sendMessage: async (id: string, input: SendMessageInput): Promise<Message> => {
     const { data } = await apiClient.post<Message>(`/conversations/${id}/messages`, input);
     return data;
+  },
+
+  // POST /conversations/:id/members → 200, updated Conversation (add members to a group).
+  addMembers: async (id: string, input: AddMembersInput): Promise<Conversation> => {
+    const { data } = await apiClient.post<Conversation>(`/conversations/${id}/members`, input);
+    return data;
+  },
+
+  // DELETE /conversations/:id/members/me → 204 (leave a group).
+  leave: async (id: string): Promise<void> => {
+    await apiClient.delete(`/conversations/${id}/members/me`);
   },
 };

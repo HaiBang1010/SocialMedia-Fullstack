@@ -48,7 +48,10 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-:root {
+/* `.theme-light` re-declares the light palette on a subtree so it stays light even under the
+   global `.dark` class on <html> — used to force-light the auth pages (theme isolation). */
+:root,
+.theme-light {
     /* Base */
     --background: oklch(0.985 0.004 60);
     --foreground: oklch(0.22 0.01 50);
