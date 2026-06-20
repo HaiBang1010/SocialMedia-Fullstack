@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { ImagePlus } from 'lucide-react';
+import { ImagePlus, UserX } from 'lucide-react';
 import { useAuthStore } from '@/stores/authStore';
 import { useComposerStore } from '@/stores/composerStore';
 import { useStoryViewerStore } from '@/stores/storyViewerStore';
@@ -10,10 +10,12 @@ import { useStartDirectConversation } from '@/features/messaging/hooks/useStartD
 import { usersApi } from '@/api';
 import { queryKeys } from '@/lib/queryKeys';
 import { formatNumber } from '@/lib/format';
+import { getStatus } from '@/lib/apiError';
 import { notifyError, notifySuccess } from '@/lib/toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import EmptyState from '@/components/common/EmptyState';
+import ErrorState from '@/components/common/ErrorState';
 import PostsGrid from '@/components/post/PostsGrid';
 import FollowButton from '@/components/profile/FollowButton';
 import { ProfileEditForm } from '@/components/profile/ProfileEditForm';
@@ -48,7 +50,7 @@ export default function UserProfilePage() {
 
   const isSelf = me?.username === username;
 
-  const { data: user, isLoading, isError } = useUserProfile(username);
+  const { data: user, isLoading, isError, error, refetch } = useUserProfile(username);
 
   // Shared after an avatar change (upload dialog OR reset-to-default): update the in-memory user
   // (Sidebar/me avatars) + refetch the profile query (header img). Stays in the edit view.
@@ -76,8 +78,27 @@ export default function UserProfilePage() {
     return <div className="p-8 text-muted-foreground">Loading…</div>;
   }
 
+  // A real failure (network / 500) → retryable ErrorState; a 404 (or settled-with-no-user) →
+  // branded "User not found". Both keep the app shell (this renders inside AppLayout's main).
+  if (isError && getStatus(error) !== 404) {
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-6">
+        <ErrorState message="Couldn't load this profile." onRetry={() => refetch()} />
+      </div>
+    );
+  }
+
   if (isError || !user) {
-    return <div className="p-8 text-destructive">User not found.</div>;
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-6">
+        <EmptyState
+          icon={UserX}
+          title="User not found"
+          description="This account doesn't exist or the username has changed."
+          action={<Button onClick={() => navigate('/')}>Back to feed</Button>}
+        />
+      </div>
+    );
   }
 
   if (editing && isSelf) {

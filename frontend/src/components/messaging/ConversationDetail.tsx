@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Phone, Video } from 'lucide-react';
+import { ArrowLeft, MessageCircleOff, Phone, Video } from 'lucide-react';
 import Avatar from '@/components/common/Avatar';
 import GroupAvatar from './GroupAvatar';
+import EmptyState from '@/components/common/EmptyState';
+import ErrorState from '@/components/common/ErrorState';
+import { Button } from '@/components/ui/button';
 import { formatRelativeTime } from '@/lib/format';
+import { getStatus } from '@/lib/apiError';
 import { useAuthStore } from '@/stores/authStore';
 import { usePresenceStore } from '@/stores/presenceStore';
 import { useCallStore } from '@/stores/callStore';
@@ -24,7 +28,7 @@ interface ConversationDetailProps {
 export default function ConversationDetail({ conversationId }: ConversationDetailProps) {
   const navigate = useNavigate();
   const meId = useAuthStore((s) => s.user?.id);
-  const { data: conversation } = useConversation(conversationId);
+  const { data: conversation, isError, error, refetch } = useConversation(conversationId);
 
   // Phase Polish — reply target, lifted here so the bubble (in MessageThread) can set it and the
   // composer (MessageInput, a sibling) can preview + send it. Reset on conversation switch.
@@ -59,6 +63,26 @@ export default function ConversationDetail({ conversationId }: ConversationDetai
   } else if (lastSeen) {
     const rel = formatRelativeTime(lastSeen);
     subtitle = rel === 'now' ? 'Active now' : `Active ${rel} ago`;
+  }
+
+  // Invalid / inaccessible conversation (bad id, not a participant, or deleted) → API 404.
+  // Early return fills only the detail pane (the desktop list aside lives in MessagesPage),
+  // so the conversation list stays visible on desktop. Non-404 → retryable error.
+  if (isError) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center p-6">
+        {getStatus(error) === 404 ? (
+          <EmptyState
+            icon={MessageCircleOff}
+            title="Conversation not found"
+            description="This conversation doesn't exist or you're no longer a member."
+            action={<Button onClick={() => navigate('/messages')}>Back to messages</Button>}
+          />
+        ) : (
+          <ErrorState message="Couldn't load this conversation." onRetry={() => refetch()} />
+        )}
+      </div>
+    );
   }
 
   return (
