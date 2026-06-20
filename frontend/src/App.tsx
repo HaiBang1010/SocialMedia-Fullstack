@@ -23,6 +23,7 @@ import ArchivePage from '@/pages/ArchivePage';
 import MessagesPage from '@/pages/MessagesPage';
 import NotificationsPage from '@/pages/NotificationsPage';
 import SearchPage from '@/pages/SearchPage';
+import NotFoundPage from '@/pages/NotFoundPage';
 import PostDetailModal from '@/components/post/PostDetailModal';
 
 // `/profile` is a stable alias for the current user's own profile URL. It lives
@@ -70,6 +71,9 @@ export default function App() {
             <Route path="/posts/:id" element={<PostDetailPage />} />
           </Route>
         </Route>
+
+        {/* Catch-all 404 — standalone (no app shell), any path that matched nothing above. */}
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
 
       {/* Overlay modal — only mounts when navigated with a background location. */}
