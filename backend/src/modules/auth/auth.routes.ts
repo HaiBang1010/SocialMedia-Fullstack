@@ -3,21 +3,22 @@ import { asyncHandler } from '../../middleware/asyncHandler';
 import { validate } from '../../middleware/validate';
 import { requireAuth } from '../../middleware/auth';
 import { AppError } from '../../middleware/error';
-import { env } from '../../config/env';
 import { registerSchema, loginSchema } from './auth.schema';
 import * as authService from './auth.service';
 
 const router = Router();
 
 // Phase Polish — the refresh token is delivered as an httpOnly cookie (unreadable by JS, mitigates
-// XSS token theft) instead of in the response body. path '/auth' scopes it to the auth endpoints;
-// secure only in production (dev is http://localhost). sameSite 'lax' — FE + BE are same-site, and
-// refresh is an XHR so the cookie is always sent. maxAge mirrors the 7d refresh-token lifetime.
+// XSS token theft) instead of in the response body. path '/auth' scopes it to the auth endpoints.
+// PROD is cross-site (FE on Vercel ↔ BE on Railway), so the cookie needs sameSite 'none' to be sent
+// on cross-origin XHR — and the browser requires Secure when SameSite=None. We set secure: true
+// unconditionally (prod is HTTPS; localhost is treated as a secure context by Chrome/Firefox, so
+// dev still works). maxAge mirrors the 7d refresh-token lifetime.
 const REFRESH_COOKIE = 'refreshToken';
 const refreshCookieOptions: CookieOptions = {
   httpOnly: true,
-  secure: env.NODE_ENV === 'production',
-  sameSite: 'lax',
+  secure: true,
+  sameSite: 'none',
   path: '/auth',
   maxAge: 7 * 24 * 60 * 60 * 1000,
 };
@@ -90,7 +91,9 @@ router.get(
  * is in-memory on the client, so dropping the cookie + clearing client state ends the session.
  */
 router.post('/logout', (req, res) => {
-  res.clearCookie(REFRESH_COOKIE, { path: '/auth' });
+  // Must match the SET attributes (path + sameSite + secure) so the browser actually clears the
+  // cross-site cookie (a SameSite=None/Secure cookie won't be removed by a bare path-only clear).
+  res.clearCookie(REFRESH_COOKIE, { path: '/auth', sameSite: 'none', secure: true, httpOnly: true });
   res.status(204).end();
 });
 
